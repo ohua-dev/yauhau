@@ -6,16 +6,18 @@
 
 (ns yauhau.ir-transform
   (:require [com.ohua.ir :as ir :refer [fn-name-in]]
-            [com.ohua.fetch.accumulator :as acc]
+            [yauhau.accumulator :as acc]
             [clojure.set :as setlib]
             [clojure.set :as set]
-            [clojure.pprint :refer [pprint]])
+            [clojure.pprint :refer [pprint]]
+            [com.ohua.util.visual :as visual])
   (:import (com.ohua.ir IRFunc IRGraphPosition))
   (:use com.ohua.util.ir
         com.ohua.util.assert
         com.ohua.util.visual))
 
 
+(def ENABLE_VISUAL_GRAPH_TRANSFORMATION_LOGGING (atom false))
 
 
 (defrecord IFLabeledFunction [function if-stack])
@@ -455,24 +457,40 @@
             graph))))))
 
 
+(defn- log-transformation-at [name]
+  (fn [graph]
+    (if @ENABLE_VISUAL_GRAPH_TRANSFORMATION_LOGGING
+      (visual/render-to-file name graph))
+    graph))
+
+
+(defn- validate-and-log [name]
+  (comp
+    (fn [graph] (ir/validate graph (str "after " name)))
+    (log-transformation-at name)))
+
+
 (def transformations
   [
    ; TODO change to tree builders
    ;insert-leaf-builders
    ; FIXME coerce smap and if-rewrite, they need run together
    smap-rewrite
+   (validate-and-log "smap-rewrite")
    cat-redundant-smap-collects
+   (validate-and-log "cat-redundant-smap-collects")
    if-rewrite
-   (fn [ir] (ir/validate ir "after if-rewrite"))
+   (validate-and-log "if-rewrite")
    cat-redundant-merges
-   (fn [ir] (ir/validate ir "after cat-redundant-merges-rewrite"))
+   (validate-and-log "cat-redundant-merges-rewrite")
    cat-redundant-identities
-   (fn [ir] (ir/validate ir "after cat-redundant-identifiers-rewrite"))
+   (validate-and-log "cat-redundant-identifiers-rewrite")
    cat-identities-with-no-successor
-   (fn [ir] (ir/validate ir "after cat-identities-with-no-successor-rewrite"))
+   (validate-and-log "cat-identities-with-no-successor-rewrite")
    coerce-merges
-   (fn [ir] (ir/validate ir "after coerce-merges"))
-   batch-rewrite])
+   (validate-and-log "coerce-merges")
+   batch-rewrite
+   (validate-and-log "batch-rewrite")])
 
 
 (def full-transform (apply comp (reverse transformations)))

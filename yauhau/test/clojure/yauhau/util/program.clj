@@ -20,7 +20,7 @@
   (:import
     ;(com.ohua.fetch IDataSource)
     ;       (java.util Arrays)
-    (com.ohua.fetch.operators Functionality AccumOp)
+    (yauhau.operators Functionality AccumOp)
     (com.ohua.lang.compile FlowGraphCompiler)))
 
 
