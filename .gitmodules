@@ -1,3 +1,6 @@
 [submodule "examples/haxl-test-generated-graph"]
 	path = examples/haxl-test-generated-graph
 	url = git://github.com/JustusAdam/haxl-test-generated-graph
+[submodule "examples/ohua-blog"]
+	path = examples/ohua-blog
+	url = git://github.com/JustusAdam/ohua-blog
