@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.concurrent-io-transform
+(ns yauhau.concurrent-io-transform
   (:require [com.ohua.ir :refer [mk-func]]))
 
 ;;;

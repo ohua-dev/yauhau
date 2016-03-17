@@ -4,6 +4,6 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.test-leaf-creation-inserter)
+(ns yauhau.test-leaf-creation-inserter)
 
 ; TODO implement this

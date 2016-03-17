@@ -4,14 +4,14 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.test-program
+(ns yauhau.test-program
   (:require [com.ohua.compile :as o]
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
             [com.ohua.util.gen :refer [def-sfn def-sfn-dt]]
-            [com.ohua.fetch.ir-transform :as trans]
-            [com.ohua.fetch.cache-transform :as cache]
-            [com.ohua.fetch.concurrent-io-transform :as conc-io]
+            [yauhau.ir-transform :as trans]
+            [yauhau.cache-transform :as cache]
+            [yauhau.concurrent-io-transform :as conc-io]
             [clojure.test :refer [deftest]]
             [clojure.repl :refer [source]]
             [com.ohua.logging :as l])

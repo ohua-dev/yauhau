@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.ir-transform
+(ns yauhau.ir-transform
   (:require [com.ohua.ir :as ir :refer [fn-name-in]]
             [com.ohua.fetch.accumulator :as acc]
             [clojure.set :as setlib]

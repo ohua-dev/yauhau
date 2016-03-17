@@ -7,8 +7,8 @@
 (ns com.ohua.fetch.test-transform
   (:require [clojure.test :as test :refer [deftest]]
             [com.ohua.ir :as ir]
-            [com.ohua.fetch.ir-transform :as trans]
-            [com.ohua.fetch.accumulator :as acc]))
+            [yauhau.ir-transform :as trans]
+            [yauhau.accumulator :as acc]))
 
 
 (def f1 (ir/->IRFunc nil "fetch" [] ["g"]))

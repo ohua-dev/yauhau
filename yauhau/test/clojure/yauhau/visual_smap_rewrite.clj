@@ -7,7 +7,7 @@
 (ns com.ohua.fetch.visual-smap-rewrite
   (:require [com.ohua.ir :as ir]
             [com.ohua.util.visual :as visual]
-            [com.ohua.fetch.ir-transform :as trans]))
+            [yauhau.ir-transform :as trans]))
 
 
 (def ir3 [(ir/mk-func "size" ['coll1] 'size1)

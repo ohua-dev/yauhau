@@ -4,10 +4,10 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.test-smap-transform
+(ns yauhau.test-smap-transform
   (:require [clojure.test :as test :refer [deftest is]]
             [com.ohua.ir :as ir]
-            [com.ohua.fetch.ir-transform :as fetch-trans]
+            [yauhau.ir-transform :as fetch-trans]
             [clojure.pprint :refer [pprint]]
             [clojure.set :as setlib]))
 

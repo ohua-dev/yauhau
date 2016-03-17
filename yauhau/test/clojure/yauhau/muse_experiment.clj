@@ -4,13 +4,13 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.muse-experiment
+(ns yauhau.muse-experiment
   (:require
     [clojure.test :refer (deftest is)]
     [promesa.core :as prom]
     [muse.core :as muse :refer :all]
     [cats.core :as m]
-    [com.ohua.fetch.util.program :refer [generate-graphs run-tests to-json]]))
+    [yauhau.util.program :refer [generate-graphs run-tests to-json]]))
 
 (def IO_FETCHED_COUNTER (atom 0))
 (def IO_BATCHED_COUNTER (atom 0))

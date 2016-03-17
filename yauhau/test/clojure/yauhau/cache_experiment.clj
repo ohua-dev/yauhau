@@ -4,13 +4,13 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.cache-experiment
+(ns yauhau.cache-experiment
   (:require [clojure.test :as test :refer [deftest]]
             [com.ohua.compile :as o]
             [com.ohua.fetch.cache-transform :as cache]
             [clojure.java.io :refer [file copy]]
             [com.ohua.fetch.util.program :refer [prepare-ns levels-from-fname to-json generate-graphs]])
-  (:import (com.ohua.fetch.operators AccumOp Functionality Functionality$DummyDataSource Caching Functionality$GenericPayload)
+  (:import (yauhau.operators AccumOp Functionality Functionality$DummyDataSource Caching Functionality$GenericPayload)
            (java.lang Integer)))
 
 

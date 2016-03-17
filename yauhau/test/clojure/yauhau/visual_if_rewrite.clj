@@ -5,7 +5,7 @@
 ;
 
 (ns com.ohua.fetch.visual-if-rewrite
-  (:require [com.ohua.fetch.ir-transform :as trans]
+  (:require [yauhau.ir-transform :as trans]
             [com.ohua.ir :as ir]
             [clojure.test :as test :refer [deftest is]]
             [clojure.pprint :refer [pprint]]

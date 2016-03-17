@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.cache-transform
+(ns yauhau.cache-transform
   (:require [com.ohua.ir :as ir :refer [mk-func reindex-stuff fn-name-in]])
   (:import [com.ohua.ir IRFunc]))
 

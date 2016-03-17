@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.accumulator
+(ns yauhau.accumulator
   (:require [com.ohua.ir :as ir]))
 
 

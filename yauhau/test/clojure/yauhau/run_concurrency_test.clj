@@ -1,11 +1,11 @@
-(ns com.ohua.fetch.run-concurrency-test
+(ns yauhau.run-concurrency-test
   (:require [clojure.test :refer [deftest]]
             [com.ohua.compile :as o]
-            [com.ohua.fetch.concurrent-io-transform :as conc-io]
+            [yauhau.concurrent-io-transform :as conc-io]
             [clojure.java.shell :refer [sh]]
             [com.ohua.logging :as l])
   (:use com.ohua.fetch.util.program)
-  (:import (com.ohua.fetch.operators Functionality Functionality$SlowDummySource Functionality$DummyDataSource)))
+  (:import (yauhau.operators Functionality Functionality$SlowDummySource Functionality$DummyDataSource)))
 
 
 (defmacro ohua [& args]
