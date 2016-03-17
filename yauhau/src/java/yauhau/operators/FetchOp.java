@@ -13,6 +13,10 @@ import java.util.ArrayList;
 
 /**
  * Created by justusadam on 12/02/16.
+ *
+ * Implementation for a basic fetch operation.
+ *
+ * If the batching optimization is enabled this will never be called.
  */
 public final class FetchOp<P, R> {
     @Function

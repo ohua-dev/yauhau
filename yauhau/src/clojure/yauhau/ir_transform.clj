@@ -27,7 +27,7 @@
 (def is-smap? (fn-name-in #{'smap "smap"}))
 (def is-one-to-n? (fn-name-in #{'one-to-n "one-to-n"}))
 (def is-collect? (fn-name-in #{'collect "collect"}))
-(def is-fetch? (fn-name-in #{"com.ohua.fetch.operators/fetch" 'com.ohua.fetch.operators/fetch "fetch" 'fetch}))
+(def is-fetch? (fn-name-in #{"yauhau.operators/fetch" 'yauhau.operators/fetch "fetch" 'fetch}))
 (def is-ite? (fn-name-in #{'ifThenElse "ifThenElse"}))
 (def is-merge? (fn-name-in #{'merge "merge"}))
 (def is-id-op? (fn-name-in #{"identity" 'identity}))

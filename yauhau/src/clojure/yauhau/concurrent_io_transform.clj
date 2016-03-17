@@ -13,7 +13,13 @@
 ;;; __accum-fetch => _accum -> dispatch -> fetch[n] -> merge -> unbatch
 ;;;
 
-(defn rewrite-accum-fn [accum-fetch-fn]
+(def is-accum? (ir/fn-name-in #{'__accumFetch 'yauhau.operators/__accumFetch}))
+
+(defn rewrite-accum-fn
+  "The rewrite extracts the fetch execution from the batched version of the __accum-fetch function.
+  In order to do so, we do batching and then use dataflow style programming to introduce parallelism:
+  __accum-fetch => _accum -> dispatch -> fetch[n] -> merge -> unbatch"
+  [accum-fetch-fn]
   ; TODO this must be easier to write, like this:
   ;[_accum (__accum (:args accum-fetch-fn))
   ; _size (size _accum)
@@ -47,10 +53,7 @@
     [accum-fetch-fn]))
 
 (defn rewrite [ir]
-  (mapcat
-    (fn [ir-fn]
-      (if (.endsWith (name (:name ir-fn)) "__accum-fetch")
-        (rewrite-accum-fn ir-fn)
-        [ir-fn]))
-    ir)
-  )
+  (ir/update-nodes-where
+    is-accum?
+    rewrite-accum-fn
+    ir))

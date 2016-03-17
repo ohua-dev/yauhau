@@ -18,5 +18,7 @@
   (ir/mk-func (symbol "__accum-fetch") (ensure-vec inputs) (ensure-vec outputs)))
 
 
-(defn mk-accum-for-fetches [f]
-  (mk-accum-op (mapcat :args f) (mapcat :return f)))
+(defn mk-accum-for-fetches
+  "Create a new accumulator where in- and outputs are the combined in and outputs of the fetches provided."
+  [f]
+  (mk-accum-op (mapcat :args f) (mapcat ir/get-return-vars f)))

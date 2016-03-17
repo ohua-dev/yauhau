@@ -13,7 +13,7 @@
   :deploy-repositories [["releases" {:url "https://clojars.org/repo" :creds :gpg}]]
 
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [ohua/ohua "0.4.4"]]
+                 [ohua/ohua "0.4.3"]]
 
   :profiles {:provided {:dependencies [[org.clojure/clojure "1.8.0"]]}
              :dev      {:plugins      [[lein-junit "1.1.8"]]
