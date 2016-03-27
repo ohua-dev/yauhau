@@ -13,7 +13,7 @@
   :deploy-repositories [["releases" {:url "https://clojars.org/repo" :creds :gpg}]]
 
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [ohua/ohua "0.4.3"]]
+                 [ohua/ohua "0.4.4"]]
 
   :profiles {:provided {:dependencies [[org.clojure/clojure "1.8.0"]]}
              :dev      {:plugins      [[lein-junit "1.1.8"]]
@@ -27,7 +27,7 @@
                         :test-paths ["yauhau/test/clojure"]
                         ; we use funcool's release of muse because it has functioning support for the monad library of cats.
                         ; they did not make a release to clojars yet so we include the jar here.
-                        ;:resource-paths ["yauhau/resources/muse-0.4.0.jar"]
+                        :resource-paths ["resources/muse-0.4.0.jar"]
                         }}
 
   :source-paths ["yauhau/src/clojure"]
