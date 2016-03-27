@@ -24,9 +24,10 @@
                                        ]
 
                         ; paths for Clojure test cases
-                        :test-paths   ["yauhau/test/clojure"]
-                        ; dangling compiler lib that will go away soon
-                        ;:resource-paths          ["yauhau/resources/muse-0.4.0.jar"]
+                        :test-paths ["yauhau/test/clojure"]
+                        ; we use funcool's release of muse because it has functioning support for the monad library of cats.
+                        ; they did not make a release to clojars yet so we include the jar here.
+                        ;:resource-paths ["yauhau/resources/muse-0.4.0.jar"]
                         }}
 
   :source-paths ["yauhau/src/clojure"]
