@@ -224,36 +224,6 @@
               new-dependencies)
             new-graph))))))
 
-;
-;(defn- if-label-graph [ir-graph]
-;  (let [labeled-functions
-;        (loop [[labeled-function & queue] (->> ir-graph
-;                                               (filter (comp empty? :args))
-;                                               (map #(->IFLabeledFunction % [])))
-;               function-mapping {}]
-;          (let [{function :function
-;                 if-stack :if-stack} labeled-function
-;                old-fn (get function-mapping function)
-;                [queue function-mapping]
-;                (if (or (nil? old-fn) (> (count if-stack) (count (.-if_stack old-fn))))
-;                  (let [_ (assert (= IRFunc (type function)) (str function))
-;                        mk-stack (cond
-;                                   (is-ite? function) #(conj if-stack (->IFStackEntry labeled-function %))
-;                                   (is-merge? function) (const (if (empty? if-stack) if-stack (pop if-stack)))
-;                                   :else (const if-stack))
-;                        consumers (->> function
-;                                       (ir/get-return-vars)
-;                                       (mapcat (fn [var]
-;                                                 (map #(->IFLabeledFunction % (mk-stack var)) (ir/get-consumers var ir-graph)))))
-;                        queue (concat queue consumers)]
-;                    [queue
-;                     (assoc function-mapping function labeled-function)])
-;                  [queue function-mapping])]
-;            (if (empty? queue)
-;              function-mapping
-;              (recur queue function-mapping))))]
-;    (into [] (map (partial get labeled-functions) ir-graph))))
-;
 
 (defn- gen-empty-for [amount out name-gen]
   (first
@@ -274,8 +244,8 @@
     (fn [func]
       (and
         (is-fetch? (.-function func))
-        (not (empty? (.-if_stack func)))
-        (let [found-if (.-if_op (peek (.-if_stack func)))]
+        (not (empty? (.-label func)))
+        (let [found-if (.-if_op (peek (.-label func)))]
           (assert-type (type curr-if) found-if)
           (= curr-if found-if))))
     labeled-graph))
@@ -283,19 +253,19 @@
 
 (defn- mapped-fetches-for-if [labeled-graph curr-if]
   (let [fetches-concerned (get-fetches-concerned labeled-graph curr-if)
-        _ (doall (map (partial assert-type IFLabeledFunction) labeled-graph))
-        _ (assert-type IFLabeledFunction curr-if)]
-    (if-not (empty? fetches-concerned) (assert-type IFLabeledFunction (first fetches-concerned)))
+        _ (doall (map (partial assert-type LabeledFunction) labeled-graph))
+        _ (assert-type LabeledFunction curr-if)]
+    (if-not (empty? fetches-concerned) (assert-type LabeledFunction (first fetches-concerned)))
     (merge
       (zipmap (ir/get-return-vars (.-function curr-if)) (repeat []))
-      (group-by #(.-arg_id (peek (.-if_stack %))) fetches-concerned))))
+      (group-by #(.-arg_id (peek (.-label %))) fetches-concerned))))
 
 
 (defn- calc-empties [name-gen if-op labeled-graph]
   (let [mapped-to-port (mapped-fetches-for-if labeled-graph if-op)
         longest-fetch-seq (apply max-key count (vals mapped-to-port))
         longest-nr (count longest-fetch-seq)
-        example-if-stack (.-if_stack (first longest-fetch-seq))
+        example-if-stack (.-label (first longest-fetch-seq))
         empty-required (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))]
     (map-from-coll
       (map
@@ -308,16 +278,16 @@
                                (pop)
                                (conj (assoc (last example-if-stack) :arg-id if-port)))
                   generated (gen-empty-for to-gen out-var name-gen)
-                  empties (map #(->IFLabeledFunction % if-stack) generated)
+                  empties (map #(->LabeledFunction % if-stack) generated)
                   _ (assert-coll empties)
                   _ (assert-type IRFunc (.-function (first empties)))
                   in-var (first (.-args (.-function (first empties))))
-                  _ (assert-type IFLabeledFunction if-op)
+                  _ (assert-type LabeledFunction if-op)
                   to-replace (if no-fetches if-op (last fetches))
 
                   replacement-head
                   (if no-fetches
-                    [if-op (->IFLabeledFunction (mk-const-nil [^{:in-idx -1} if-port] (first (.-args (first generated)))) if-stack)]
+                    [if-op (->LabeledFunction (mk-const-nil [^{:in-idx -1} if-port] (first (.-args (first generated)))) if-stack)]
                     [(assoc-in (last fetches) [:function :return] in-var)])]
               [to-replace (into [] (concat replacement-head empties))])))
         empty-required))))
@@ -337,12 +307,12 @@
 
 (defn- if-rewrite-one [name-gen labeled-graph labeled-if]
   (let [[labeled-graph labeled-if] (insert-empties name-gen labeled-graph labeled-if)
-        _ (doall (map (partial assert-type IFLabeledFunction) labeled-graph))
+        _ (doall (map (partial assert-type LabeledFunction) labeled-graph))
         curr-if (.-function labeled-if)
         _ (assert-type IRFunc curr-if)
         mapped-to-port (mapped-fetches-for-if labeled-graph labeled-if)
         fetches (vals mapped-to-port)
-        if-stack (.-if_stack labeled-if)
+        if-stack (.-label labeled-if)
         replaces (apply mapcat (fn [& parallel-fetches]
                                  (let [[head-fetch & other-fetches] parallel-fetches
                                        all-inputs (mapcat
@@ -352,10 +322,10 @@
                                                     parallel-fetches)
                                        merge-out (name-gen)
                                        fetch-out (name-gen)
-                                       label #(->IFLabeledFunction % if-stack)
+                                       label #(->LabeledFunction % if-stack)
                                        merge (label (mk-merge all-inputs merge-out))
                                        new-fetch (label (mk-fetch [merge-out] fetch-out))
-                                       identity-ops (map (fn [fetch] (label (mk-id-op [^{:out-idx -1} (.-arg_id (last (.-if_stack fetch)))
+                                       identity-ops (map (fn [fetch] (label (mk-id-op [^{:out-idx -1} (.-arg_id (last (.-label fetch)))
                                                                                        ^{:out-idx 0} fetch-out]
                                                                                       (.-return (.-function fetch))))) parallel-fetches)]
                                    (concat [[head-fetch (concat [merge new-fetch] identity-ops)]] (map (fn [a] [a []]) other-fetches))))
@@ -363,31 +333,12 @@
         _ (assert-coll replaces)
         _ (if-not (empty? replaces)
             (do (assert-coll (first replaces))
-                (assert-type IFLabeledFunction (first (first replaces)))
+                (assert-type LabeledFunction (first (first replaces)))
                 (assert-coll (second (first replaces)))
-                (assert-type IFLabeledFunction (-> replaces first second first))))
+                (assert-type LabeledFunction (-> replaces first second first))))
         replacement-map (map-from-coll replaces)
         _ (assert-map replacement-map)]
     (ir/update-graph replacement-map labeled-graph)))
-
-
-
-;(defn if-rewrite [ir-graph]
-;  (let [name-gen (mk-name-gen-func ir-graph)
-;        labeled-graph (if-label-graph ir-graph)
-;        fetches-with-if (filter #(and (is-fetch? (.-function %))
-;                                      (not (empty? (.-if_stack %)))) labeled-graph)
-;        if-stacks (->> fetches-with-if
-;                       (map :if-stack)
-;                       (sort-by count)
-;                       (reverse))
-;        working-order (distinct (map (comp :if-op peek) if-stacks))]
-;
-;    (unlabel-graph
-;      (reduce
-;        (partial if-rewrite-one name-gen)
-;        labeled-graph
-;        working-order))))
 
 
 (defn insert-leaf-builders [ir-graph]
@@ -649,8 +600,6 @@
    (validate-and-log "smap-rewrite")
    cat-redundant-smap-collects
    (validate-and-log "cat-redundant-smap-collects")
-   if-rewrite
-   (validate-and-log "if-rewrite")
    cat-redundant-merges
    (validate-and-log "cat-redundant-merges-rewrite")
    cat-redundant-identities
