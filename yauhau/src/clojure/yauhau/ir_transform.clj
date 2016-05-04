@@ -11,7 +11,8 @@
             [clojure.set :as set]
             [clojure.pprint :refer [pprint]]
             [com.ohua.util.visual :as visual])
-  (:import (com.ohua.ir IRFunc IRGraphPosition))
+  (:import (com.ohua.ir IRFunc IRGraphPosition)
+           (clojure.lang PersistentArrayMap))
   (:use com.ohua.util.ir
         com.ohua.util.assert
         com.ohua.util.visual))
@@ -23,6 +24,33 @@
 (defrecord IFLabeledFunction [function if-stack])
 (defrecord IFStackEntry [if-op arg-id])
 (defrecord SmapNestingLevel [size-source])
+(defrecord SmapStackEntry [size-op])
+(defrecord LabeledFunction [function label])
+(defrecord ContextType
+  [; A name for this context type
+   name
+   ; predicate whether a certain function/operator opens a context of this type
+   ; type = Function -> Boolean
+   trigger-open
+   ; predicate whether a certain function/operator closes a context of this type
+   ; type = Function -> Boolean
+   trigger-close
+   ; verify the context has been correctly opened and closed
+   ; type = (Function, StackFrame) -> Boolean
+   verify-context-wrap
+   ; function for creating a context stack frame for each of the outputs
+   ; type = (Graph, Function, Symbol) -> StackFrameData
+   create-stack-value
+   ; rewrite the graph unwiding the topmost context stack value
+   ; type = (NameGen, LabeledGraph, StackFrameData) -> LabeledGraph
+   unwind
+   ; traverse the graph and remove any redundant operators
+   ; type = Graph -> Graph
+   clean-graph
+   ])
+
+(defprotocol ContextStackEntry
+  (get-context [this]))
 
 
 ;; RECOGNIZE SPECIFIC FUNCTIONS
@@ -196,36 +224,36 @@
               new-dependencies)
             new-graph))))))
 
-
-(defn- if-label-graph [ir-graph]
-  (let [labeled-functions
-        (loop [[labeled-function & queue] (->> ir-graph
-                                               (filter (comp empty? :args))
-                                               (map #(->IFLabeledFunction % [])))
-               function-mapping {}]
-          (let [{function :function
-                 if-stack :if-stack} labeled-function
-                old-fn (get function-mapping function)
-                [queue function-mapping]
-                (if (or (nil? old-fn) (> (count if-stack) (count (.-if_stack old-fn))))
-                  (let [_ (assert (= IRFunc (type function)) (str function))
-                        mk-stack (cond
-                                   (is-ite? function) #(conj if-stack (->IFStackEntry labeled-function %))
-                                   (is-merge? function) (const (if (empty? if-stack) if-stack (pop if-stack)))
-                                   :else (const if-stack))
-                        consumers (->> function
-                                       (ir/get-return-vars)
-                                       (mapcat (fn [var]
-                                                 (map #(->IFLabeledFunction % (mk-stack var)) (ir/get-consumers var ir-graph)))))
-                        queue (concat queue consumers)]
-                    [queue
-                     (assoc function-mapping function labeled-function)])
-                  [queue function-mapping])]
-            (if (empty? queue)
-              function-mapping
-              (recur queue function-mapping))))]
-    (into [] (map (partial get labeled-functions) ir-graph))))
-
+;
+;(defn- if-label-graph [ir-graph]
+;  (let [labeled-functions
+;        (loop [[labeled-function & queue] (->> ir-graph
+;                                               (filter (comp empty? :args))
+;                                               (map #(->IFLabeledFunction % [])))
+;               function-mapping {}]
+;          (let [{function :function
+;                 if-stack :if-stack} labeled-function
+;                old-fn (get function-mapping function)
+;                [queue function-mapping]
+;                (if (or (nil? old-fn) (> (count if-stack) (count (.-if_stack old-fn))))
+;                  (let [_ (assert (= IRFunc (type function)) (str function))
+;                        mk-stack (cond
+;                                   (is-ite? function) #(conj if-stack (->IFStackEntry labeled-function %))
+;                                   (is-merge? function) (const (if (empty? if-stack) if-stack (pop if-stack)))
+;                                   :else (const if-stack))
+;                        consumers (->> function
+;                                       (ir/get-return-vars)
+;                                       (mapcat (fn [var]
+;                                                 (map #(->IFLabeledFunction % (mk-stack var)) (ir/get-consumers var ir-graph)))))
+;                        queue (concat queue consumers)]
+;                    [queue
+;                     (assoc function-mapping function labeled-function)])
+;                  [queue function-mapping])]
+;            (if (empty? queue)
+;              function-mapping
+;              (recur queue function-mapping))))]
+;    (into [] (map (partial get labeled-functions) ir-graph))))
+;
 
 (defn- gen-empty-for [amount out name-gen]
   (first
@@ -344,22 +372,22 @@
 
 
 
-(defn if-rewrite [ir-graph]
-  (let [name-gen (mk-name-gen-func ir-graph)
-        labeled-graph (if-label-graph ir-graph)
-        fetches-with-if (filter #(and (is-fetch? (.-function %))
-                                      (not (empty? (.-if_stack %)))) labeled-graph)
-        if-stacks (->> fetches-with-if
-                       (map :if-stack)
-                       (sort-by count)
-                       (reverse))
-        working-order (distinct (map (comp :if-op peek) if-stacks))]
-
-    (unlabel-graph
-      (reduce
-        (partial if-rewrite-one name-gen)
-        labeled-graph
-        working-order))))
+;(defn if-rewrite [ir-graph]
+;  (let [name-gen (mk-name-gen-func ir-graph)
+;        labeled-graph (if-label-graph ir-graph)
+;        fetches-with-if (filter #(and (is-fetch? (.-function %))
+;                                      (not (empty? (.-if_stack %)))) labeled-graph)
+;        if-stacks (->> fetches-with-if
+;                       (map :if-stack)
+;                       (sort-by count)
+;                       (reverse))
+;        working-order (distinct (map (comp :if-op peek) if-stacks))]
+;
+;    (unlabel-graph
+;      (reduce
+;        (partial if-rewrite-one name-gen)
+;        labeled-graph
+;        working-order))))
 
 
 (defn insert-leaf-builders [ir-graph]
@@ -455,6 +483,148 @@
           (recur
             (set/difference merges clustered-merges-w-bott)
             graph))))))
+
+
+(def if-context
+  (->ContextType
+    "if"
+    is-ite?
+    is-merge?
+    (fn [_ frame] (= IFStackEntry (type frame)))
+    (fn [_ if-op arg-id] (->IFStackEntry if-op arg-id))
+    (fn [name-gen graph stackframe]
+      (if-rewrite-one name-gen graph stackframe))
+    (comp
+      cat-redundant-merges
+      cat-redundant-identities
+      cat-identities-with-no-successor
+      coerce-merges)))
+
+
+(def smap-context
+  (->ContextType
+    "smap"
+    is-smap?
+    is-collect?
+    (fn [_ frame] (= SmapStackEntry (type frame)))
+    (fn [graph smap-fun _]
+      (->SmapStackEntry (get-size-op smap-fun graph)))
+    (fn [name-gen graph]
+      )
+    cat-redundant-smap-collects))
+
+
+(extend-protocol ContextStackEntry
+  IFStackEntry
+  (get-context [_] if-context)
+  SmapStackEntry
+  (get-context [_] smap-context))
+
+
+(def context-stack [if-context smap-context])
+
+
+(defn forward-label-graph [reduction-function
+                           initial-state
+                           initial-label-fn
+                           graph]
+  (let [initial-fns (->> graph
+                         (filter (comp empty? :args))
+                         (map #(->LabeledFunction % (initial-label-fn %))))]
+    (loop [[head & queue] initial-fns
+           state initial-state
+           functions initial-fns]
+      (let [{function :function
+             label    :label} head
+            successors (ir/successors function graph)
+            [new-state fns]
+            (reduce
+              (fn [[state fns] node]
+                (let [[new-state labeled-fn]
+                      (reduction-function
+                        state
+                        head
+                        node)]
+                  [(if (nil? new-state) state new-state)
+                   (if (nil? labeled-fn) fns (conj fns labeled-fn))]))
+              [state []]
+              successors)
+            new-queue (concat queue fns)
+            new-fns (concat functions fns)]
+        (if (empty? new-queue)
+          [new-state new-fns]
+          (recur
+            new-queue
+            new-state
+            new-fns))))))
+
+
+(defn closes-context? [current-label-stack function]
+  (some
+    (fn [context]
+      (let [trigger (.-trigger_close context)]
+        (if (trigger function)
+          (assert ((.-verify_context_wrap context) function (first current-label-stack)) (str "Context wrapping verification failed for context " (.-name context)))
+          false)))
+    context-stack))
+
+
+; works under the assumption that any function will only ever open one new context and no function will simultaneously open and close a context
+(defn graph-reduction-function
+  [graph
+   ^PersistentArrayMap fn-map
+   {function    :function
+    label-stack :label}
+   node]
+  (let [^LabeledFunction saved (get fn-map node)]
+    (if (or (nil? saved) (> (count (.-label saved)) (count label-stack)))
+      (let [opened-context? (some
+                              (fn [context]
+                                (if ((.-trigger_open context) node)
+                                  context
+                                  false))
+                              context-stack)
+            new-stack (cond
+                        opened-context? (let [creator-fn (.-create_stack_value opened-context?)
+                                              arg-id (first (set/intersection (set (.-return function)) (set (.-args node))))
+                                              data (creator-fn graph node arg-id)]
+                                          (conj label-stack data))
+                        (closes-context? label-stack node) (pop label-stack)
+                        :else label-stack)
+            labeled-fn (->LabeledFunction node new-stack)]
+        [(assoc fn-map node labeled-fn) labeled-fn]))))
+
+
+(defn label-graph [graph]
+  (forward-label-graph
+    (partial graph-reduction-function graph)
+    {}
+    (constantly [])
+    graph))
+
+
+(defn- unwind-context [ir-graph labeled-graph]
+  (let [name-gen (mk-name-gen-func ir-graph)
+        _ (assert-coll-of-type LabeledFunction labeled-graph)
+        fetches-in-context (filter #(and (is-fetch? (.-function %))
+                                         (not (empty? (.-label %)))) labeled-graph)
+        label-stacks (->> fetches-in-context
+                          (map :label)
+                          (distinct)
+                          (sort-by count)
+                          (reverse))
+        working-order (distinct (map peek label-stacks))]
+
+    (unlabel-graph
+      (reduce
+        (fn [graph ^ContextStackEntry stackframe]
+          (let [^ContextType context-type (get-context stackframe)
+                rewrite-fn (.-unwind context-type)
+                cleaning-fn (.-clean_graph context-type)]
+            (cleaning-fn
+              (rewrite-fn name-gen graph stackframe))))
+        labeled-graph
+        working-order))))
 
 
 (defn- log-transformation-at [name]
