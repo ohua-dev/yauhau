@@ -5,7 +5,7 @@
 ;
 
 (ns yauhau.concurrent-io-transform
-  (:require [com.ohua.ir :refer [mk-func]]))
+  (:require [com.ohua.ir :as ir :refer [mk-func]]))
 
 ;;;
 ;;; The rewrite extracts the fetch execution from the batched version of the __accum-fetch function.
@@ -34,9 +34,9 @@
     (let [__accum (mk-func (symbol "__accum") (:args accum-fetch-fn) (gensym "accum-out"))
 
           ; pipe the remaining request list individually
-          __size (mk-func (symbol "com.ohua.lang.operators" "size") [(:return __accum)] [(gensym "size")])
-          __one-to-n (mk-func (symbol "com.ohua.lang.operators" "one-to-n") [(first (:return __size)) (:return __accum)] (gensym "one-to-n"))
-          __smap (mk-func (symbol "com.ohua.lang.operators" "smap-fun") [(:return __one-to-n)] (gensym "smap"))
+          __size (mk-func (symbol "com.ohua.lang.functions" "size") [(:return __accum)] [(gensym "size")])
+          __one-to-n (mk-func (symbol "com.ohua.lang.functions" "one-to-n") [(first (:return __size)) (:return __accum)] (gensym "one-to-n"))
+          __smap (mk-func (symbol "com.ohua.lang.functions" "smap-fun") [(:return __one-to-n)] (gensym "smap"))
 
           __dispatch (mk-func (symbol "__dispatch") [(:return __smap)] (into []
                                                                              (map

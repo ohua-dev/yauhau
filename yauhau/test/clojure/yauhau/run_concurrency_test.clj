@@ -4,8 +4,8 @@
             [yauhau.concurrent-io-transform :as conc-io]
             [clojure.java.shell :refer [sh]]
             [com.ohua.logging :as l])
-  (:use com.ohua.fetch.util.program)
-  (:import (yauhau.operators Functionality Functionality$SlowDummySource Functionality$DummyDataSource)))
+  (:use yauhau.util.program)
+  (:import (yauhau.functions Functionality Functionality$SlowDummySource Functionality$DummyDataSource)))
 
 
 (defmacro ohua [& args]
@@ -13,13 +13,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 conc-io/rewrite
 
                                                 ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
                                                 ]}
      :run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
                         (.setProperties (doto (new java.util.Properties)
@@ -35,13 +35,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ;conc-io/rewrite
 
                                                 ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
                                                 ]}
      ;:run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
      ;                   (.setProperties (doto (new java.util.Properties)

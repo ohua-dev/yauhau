@@ -4,9 +4,9 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
 import yauhau.*;
 
@@ -16,35 +16,35 @@ import yauhau.*;
 public class UtilityOperators {
 
     public static final class Identity {
-        @Function
+        @defsfn
         public Object identity(@ReadOnly Object input) {
             return input;
         }
     }
 
     public static final class MkReqBranch {
-        @Function
+        @defsfn
         public RequestTreeBranch __mkReqBranch(@ReadOnly Iterable<RequestTree> trees) {
             return new RequestTreeBranch(trees);
         }
     }
 
     public static final class MkReqLeaf {
-        @Function
+        @defsfn
         public RequestTree __mkReqTreeLeaf(@ReadOnly Request request) {
             return new RequestTreeLeaf(request);
         }
     }
 
     public static final class MkReqMultiLeaf {
-        @Function
+        @defsfn
         public RequestTreeMultiLeaf __mkReqMultiLeaf(@ReadOnly Iterable<Request> requests) {
             return new RequestTreeMultiLeaf(requests);
         }
     }
 
     public static final class PackageArgs {
-        @Function
+        @defsfn
         public Object[] __packageArgs(@ReadOnly Object... args) {
             return args;
         }

@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.visual-if-rewrite
+(ns yauhau.visual-if-rewrite
   (:require [yauhau.ir-transform :as trans]
             [com.ohua.ir :as ir]
             [clojure.test :as test :refer [deftest is]]
@@ -68,16 +68,17 @@
 
 
 
-(doall
-  (map
-    (fn [[irnum ir]]
-      (let [transformed (trans/if-rewrite ir)
-            cat-merges (trans/cat-redundant-merges transformed)
-            cat-ids (trans/cat-redundant-identities cat-merges)
-            coerce-merges (trans/coerce-merges cat-ids)]
-        (render-to-file "original" irnum ir)
-        (render-to-file "ir-rewrite" irnum transformed)
-        (render-to-file "cat-merges" irnum cat-merges)
-        (render-to-file "cat-ids" irnum cat-ids)
-        (render-to-file "coerce-merges" irnum coerce-merges)))
-    (seq to-print)))
+(defn main []
+  (doall
+    (map
+      (fn [[irnum ir]]
+        (let [[transformed _] (trans/context-rewrite ir)
+              cat-merges (trans/cat-redundant-merges transformed)
+              cat-ids (trans/cat-redundant-identities cat-merges)
+              coerce-merges (trans/coerce-merges cat-ids)]
+          (render-to-file (str "original-" irnum) ir)
+          (render-to-file (str "ir-rewrite-" irnum) transformed)
+          (render-to-file (str "cat-merges-" irnum) cat-merges)
+          (render-to-file (str "cat-ids-" irnum) cat-ids)
+          (render-to-file (str "coerce-merges-" irnum) coerce-merges)))
+      (seq to-print))))

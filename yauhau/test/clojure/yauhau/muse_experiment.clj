@@ -129,7 +129,7 @@
 ;               ; make sure the linker context knows the namespace of the stateful functions
 ;               _ (require '[clojure.core :refer :all])
 ;               _ (require '[com.ohua.compile])
-;               _ (com.ohua.link/link ['com.ohua.fetch.operators])
+;               _ (com.ohua.link/link ['com.ohua.fetch.functions])
 ;
 ;               _ (set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS true)
 ;               _ (set! FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)

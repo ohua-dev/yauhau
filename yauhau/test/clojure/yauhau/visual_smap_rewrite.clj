@@ -4,10 +4,13 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.visual-smap-rewrite
+(ns yauhau.visual-smap-rewrite
   (:require [com.ohua.ir :as ir]
             [com.ohua.util.visual :as visual]
-            [yauhau.ir-transform :as trans]))
+            [yauhau.ir-transform :as trans]
+            [yauhau.ir-transform :as fetch-trans]
+            [com.ohua.context :as ctxlib]
+            [monads.core :refer [return]]))
 
 
 (def ir3 [(ir/mk-func "size" ['coll1] 'size1)
@@ -29,8 +32,11 @@
           (ir/mk-func "collect" ['size2 'i] 'j)])
 
 
-(def write-graph (partial visual/render-to-file "smap"))
+(defn write-graph [name number graph] (visual/render-to-file (str "smap" name number) graph))
+
+
+(def smap-only-rewrite (partial fetch-trans/context-rewrite-with {ctxlib/smap-ctx (fetch-trans/->Rewrite fetch-trans/wrap-smap-once return)}))
 
 
 (write-graph "original" 4 ir4)
-(write-graph "smap-rewrite" 4 (trans/smap-rewrite ir4))
+(write-graph "smap-rewrite" 4 (first (smap-only-rewrite ir4)))

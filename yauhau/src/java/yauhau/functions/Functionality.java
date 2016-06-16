@@ -4,9 +4,9 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
 import yauhau.IDataSource;
 import yauhau.Request;
@@ -219,7 +219,7 @@ public class Functionality {
     }
 
     public static class ReadRequest {
-        @Function
+        @defsfn
         @SuppressWarnings("unchecked")
         public Request readRequest(@ReadOnly Object... deps) {
             READ_REQUEST_COUNTER++;
@@ -228,7 +228,7 @@ public class Functionality {
     }
 
     public static class SlowReadRequest {
-        @Function
+        @defsfn
         @SuppressWarnings("unchecked")
         public Request slowReadRequest(@ReadOnly Object... deps) {
             READ_REQUEST_COUNTER++;
@@ -238,7 +238,7 @@ public class Functionality {
     }
 
     public static class WriteRequest {
-        @Function
+        @defsfn
         @SuppressWarnings("unchecked")
         public Request writeRequest(@ReadOnly Object... deps) {
             WRITE_REQUEST_COUNTER++;
@@ -247,7 +247,7 @@ public class Functionality {
     }
 
     public static class Computation {
-        @Function
+        @defsfn
         public String compute(@ReadOnly Object[] deps, long timeOut) throws InterruptedException {
 //      Thread.sleep(timeOut);
             return "foo";
@@ -255,7 +255,7 @@ public class Functionality {
     }
 
     public static class VariableDestructuring {
-        @Function
+        @defsfn
         public Object[] vector(Object[] deps) throws InterruptedException {
             return deps;
         }

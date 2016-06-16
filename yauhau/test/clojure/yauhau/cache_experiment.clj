@@ -6,11 +6,11 @@
 
 (ns yauhau.cache-experiment
   (:require [clojure.test :as test :refer [deftest]]
-            [com.ohua.compile :as o]
-            [com.ohua.fetch.cache-transform :as cache]
+            [com.ohua.lang :as o]
+            [yauhau.cache-transform :as cache]
             [clojure.java.io :refer [file copy]]
-            [com.ohua.fetch.util.program :refer [prepare-ns levels-from-fname to-json generate-graphs]])
-  (:import (yauhau.operators AccumOp Functionality Functionality$DummyDataSource Caching Functionality$GenericPayload)
+            [yauhau.util.program :refer [prepare-ns levels-from-fname to-json generate-graphs]])
+  (:import (yauhau.functions AccumOp Functionality Functionality$DummyDataSource Caching Functionality$GenericPayload)
            (java.lang Integer)))
 
 
@@ -19,13 +19,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ;conc-io/rewrite
 
                                                 ; cache rewrite
-                                                (partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+                                                (partial cache/cache-rewrite "yauhau.functions/round-persistent-cache-manager")
                                                 ]}))
 
 
@@ -34,13 +34,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ;conc-io/rewrite
 
                                                 ; cache rewrite
-                                                (partial cache/cache-rewrite "com.ohua.fetch.operators/request-persistent-cache-manager")
+                                                (partial cache/cache-rewrite "yauhau.functions/request-persistent-cache-manager")
                                                 ]}))
 
 
@@ -49,13 +49,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ;conc-io/rewrite
 
                                                 ; cache rewrite
-                                                (partial cache/cache-rewrite "com.ohua.fetch.operators/request-persistent-flush-cache-manager")
+                                                (partial cache/cache-rewrite "yauhau.functions/request-persistent-flush-cache-manager")
                                                 ]}))
 
 
@@ -64,13 +64,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ;conc-io/rewrite
 
                                                 ; cache rewrite
-                                                (partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-flush-cache-manager")
+                                                (partial cache/cache-rewrite "yauhau.functions/round-persistent-flush-cache-manager")
                                                 ]}))
 
 
@@ -121,11 +121,11 @@
 
 
 (deftest cache-experiment
-  (let [source-file "com.ohua.fetch/test/clojure/generated/cache_experiment.clj"
-        round-persistent-file "com.ohua.fetch/test/clojure/generated/round_persistent_experiment.clj"
-        request-persistent-file "com.ohua.fetch/test/clojure/generated/request_persistent_experiment.clj"
-        round-persistent-flush-file "com.ohua.fetch/test/clojure/generated/round_persistent_flush_experiment.clj"
-        request-persistent-flush-file "com.ohua.fetch/test/clojure/generated/request_persistent_flush_experiment.clj"]
+  (let [source-file "yauhau/test/clojure/generated/cache_experiment.clj"
+        round-persistent-file "yauhau/test/clojure/generated/round_persistent_experiment.clj"
+        request-persistent-file "yauhau/test/clojure/generated/request_persistent_experiment.clj"
+        round-persistent-flush-file "yauhau/test/clojure/generated/round_persistent_flush_experiment.clj"
+        request-persistent-flush-file "yauhau/test/clojure/generated/request_persistent_flush_experiment.clj"]
     ;(println (Functionality$GenericPayload/testEquality))))
     (generate-graphs
       "-L" "Ohua"

@@ -4,9 +4,9 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import yauhau.Request;
 
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import java.util.ArrayList;
  * If the batching optimization is enabled this will never be called.
  */
 public final class FetchOp<P, R> {
-    @Function
+    @defsfn
     public R fetch(Request<P, R> request) {
         ArrayList<P> l = new ArrayList<>();
         l.add(request.getPayload());

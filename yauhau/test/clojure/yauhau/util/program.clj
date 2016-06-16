@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns com.ohua.fetch.util.program
+(ns yauhau.util.program
   (:require [com.ohua.compile :as o]
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
@@ -20,7 +20,7 @@
   (:import
     ;(com.ohua.fetch IDataSource)
     ;       (java.util Arrays)
-    (yauhau.operators Functionality AccumOp)
+    (yauhau.functions Functionality AccumOp)
     (com.ohua.lang.compile FlowGraphCompiler)))
 
 
@@ -30,27 +30,27 @@
 (defmacro get-data [& args]
   (if (and (< (count args) 3)
            (not (symbol? (second (reverse args)))))
-    `(com.ohua.fetch.operators/fetch
-       (com.ohua.fetch.operators/read-request (into-array Object [~@args])))
-    `(com.ohua.fetch.operators/fetch
-       (com.ohua.fetch.operators/read-request ~@args))
+    `(yauhau.functions/fetch
+       (yauhau.functions/read-request (into-array Object [~@args])))
+    `(yauhau.functions/fetch
+       (yauhau.functions/read-request ~@args))
     )
   )
 
 (defmacro write-data [& args]
   (if (and (< (count args) 3)
            (not (symbol? (second (reverse args)))))
-    `(com.ohua.fetch.operators/store
-       (com.ohua.fetch.operators/write-request (into-array Object [~@args])))
-    `(com.ohua.fetch.operators/store
-       (com.ohua.fetch.operators/write-request ~@args))
+    `(yauhau.functions/store
+       (yauhau.functions/write-request (into-array Object [~@args])))
+    `(yauhau.functions/store
+       (yauhau.functions/write-request ~@args))
     )
   )
 
 (defmacro compute [& args]
   (if (< (count args) 2)
-    `(com.ohua.fetch.operators/compute (into-array Object []) ~@args)
-    `(com.ohua.fetch.operators/compute ~@args)
+    `(yauhau.functions/compute (into-array Object []) ~@args)
+    `(yauhau.functions/compute ~@args)
     )
   )
 
@@ -58,10 +58,10 @@
 (defmacro slow-get-data [& args]
   (if (and (< (count args) 3)
            (not (symbol? (second (reverse args)))))
-    `(com.ohua.fetch.operators/fetch
-       (com.ohua.fetch.operators/slow-read-request (into-array Object [~@args])))
-    `(com.ohua.fetch.operators/fetch
-       (com.ohua.fetch.operators/slow-read-request ~@args))
+    `(yauhau.functions/fetch
+       (yauhau.functions/slow-read-request (into-array Object [~@args])))
+    `(yauhau.functions/fetch
+       (yauhau.functions/slow-read-request ~@args))
     )
   )
 
@@ -78,8 +78,8 @@
         ;_ (println "level-test?" *ns*)
         ; make sure the linker context knows the namespace of the stateful functions
         _ (require '[clojure.core :refer :all])
-        _ (require '[com.ohua.compile])
-        _ (com.ohua.link/link ['com.ohua.fetch.operators])
+        _ (require '[com.ohua.lang])
+        _ (com.ohua.link/link ['yauhau.functions])
 
         _ (set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS true)
         _ (set! FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)

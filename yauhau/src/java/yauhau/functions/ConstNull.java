@@ -4,16 +4,16 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import yauhau.Request;
 
 /**
  * Created by justusadam on 09/03/16.
  */
 public final class ConstNull {
-    @Function
+    @defsfn
     public Request __constNull() {
         return null;
     }

@@ -4,7 +4,7 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
 import yauhau.IDataSource;
 import yauhau.Request;

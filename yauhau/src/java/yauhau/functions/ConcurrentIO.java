@@ -4,10 +4,12 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
+import com.ohua.engine.flowgraph.elements.operator.Control;
+import com.ohua.engine.flowgraph.elements.operator.DataflowFunction;
 import com.ohua.engine.flowgraph.elements.operator.OutputMatch;
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import yauhau.IDataSource;
 import yauhau.Request;
 import yauhau.util.Triple;
@@ -22,7 +24,7 @@ import java.util.stream.Collectors;
 public class ConcurrentIO {
 
     public static class Fetch {
-        @Function
+        @defsfn
         public List<Triple<Integer, Object, Integer>> __batchedFetch(Tuple<Object, Set<Triple<Integer, Request, Integer>>> batchedRequest) {
             IDataSource ds = batchedRequest.get2().iterator().next().get2().getDataSource();
             @SuppressWarnings("unchecked")
@@ -41,10 +43,10 @@ public class ConcurrentIO {
     }
 
     public static class Unbatching {
-        @Function
+        @DataflowFunction
         public Object[] __unbatch(List<Triple<Integer, Object, Integer>> batchedResponse) {
             Object[] result = new Object[batchedResponse.get(0).get3()];
-            Arrays.fill(result, OutputMatch.OutputMatcher.Control.DROP);
+            Arrays.fill(result, Control.DROP);
             batchedResponse.stream().forEach(l -> result[l.get1()] = l.get2());
             return result;
         }

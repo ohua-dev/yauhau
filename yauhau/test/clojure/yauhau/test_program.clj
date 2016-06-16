@@ -15,8 +15,8 @@
             [clojure.test :refer [deftest]]
             [clojure.repl :refer [source]]
             [com.ohua.logging :as l])
-  (:use com.ohua.fetch.util.program)
-  (:import (com.ohua.fetch.operators Functionality AccumOp)))
+  (:use yauhau.util.program)
+  (:import (yauhau.functions Functionality AccumOp)))
 
 ;(defprotocol IGenericPayload
 ;  (equals [other-payload]))
@@ -73,13 +73,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ; conc-io/rewrite
 
                                                 ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
                                                 ]}))
 
 (defmacro ohua-conc [& args]
@@ -87,13 +87,13 @@
      ~@args
      :compile-with-config {:df-transformations [
                                                 ; batch rewrite
-                                                ~@com.ohua.fetch.ir-transform/transformations
+                                                ~@yauhau.ir-transform/transformations
 
                                                 ; concurrent batch I/O rewrite
                                                 ; conc-io/rewrite
 
                                                 ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
                                                 ]}
      :run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
                         (.setProperties (doto (new java.util.Properties)
@@ -170,7 +170,7 @@
 ;      ; make sure the linker context knows the namespace of the stateful functions
 ;      _ (require '[clojure.core :refer :all])
 ;      _ (require '[com.ohua.compile])
-;      _ (com.ohua.link/link ['com.ohua.fetch.operators])
+;      _ (com.ohua.link/link ['com.ohua.fetch.functions])
 ;
 ;      _ (set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS true)
 ;      _ (set! FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)
@@ -208,7 +208,7 @@
 ;  (spit "test/output.json" results)
 ;  ))
 
-;(o/ohua :import [com.ohua.fetch.operators])
+;(o/ohua :import [com.ohua.fetch.functions])
 ;
 ;(deftest experiment2
 ;  (l/enable-compilation-logging)
@@ -237,7 +237,7 @@
 ;                                       ; conc-io/rewrite
 ;
 ;                                       ; cache rewrite
-;                                       ;(partial cache/cache-rewrite "com.ohua.fetch.operators/round-persistent-cache-manager")
+;                                       ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
 ;                                       ]
 ;                  }
 ;                 )

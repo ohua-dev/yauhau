@@ -4,10 +4,10 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
+import com.ohua.lang.defsfn;
 import yauhau.IDataSource;
 import yauhau.Request;
 import yauhau.util.SimpleSelect;
@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * Implementation for accumulation operators.
+ * Implementation for accumulation functions.
  */
 public class AccumOp {
 
@@ -28,7 +28,7 @@ public class AccumOp {
 
     public static class Accumulation {
 
-        @Function
+        @defsfn
         public List<Tuple<Object, Set<Triple<Integer, Request, Integer>>>> __accum(@ReadOnly Request... requests) {
             IO_FETCH_COUNTER += requests.length;
             Map<Object, Set<Triple<Integer, Request, Integer>>> batchedRequests = IntStream.range(0, requests.length).boxed().map(
@@ -53,7 +53,7 @@ public class AccumOp {
     }
 
     public static class AccumulateAndFetch extends Accumulation {
-        @Function
+        @defsfn
         public Object[] __accumFetch(@ReadOnly Request... requests) {
             Map<Object, Set<Request>> mappedRequests = super.__accum(requests).stream().collect(
                     Collectors.toMap(

@@ -4,9 +4,9 @@
  * This source code is licensed under the terms described in the associated LICENSE file.
  */
 
-package yauhau.operators;
+package yauhau.functions;
 
-import com.ohua.lang.Function;
+import com.ohua.lang.defsfn;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
 import yauhau.Request;
 
@@ -117,21 +117,21 @@ public class Caching {
     }
 
     public static class RoundPersistentCache {
-        @Function
+        @defsfn
         public Cache roundPersistentCacheManager() {
             return new MapCache(StoreHandlers.dropOne());
         }
     }
 
     public static class RoundPersistentFlushCache {
-        @Function
+        @defsfn
         public Cache roundPersistentFlushCacheManager() {
             return new MapCache(StoreHandlers.dropAll());
         }
     }
 
     public static class CachedAccumFetch extends AccumOp.AccumulateAndFetch {
-        @Function
+        @defsfn
         public Object[] __cachedAccumFetch(Cache cache, @ReadOnly Request... requests) {
             // load requests that are not fetched yet
             List<Request> nonCachedRequests = Arrays.stream(requests).filter(l -> cache.get(l) == null).collect(Collectors.toList());
@@ -153,14 +153,14 @@ public class Caching {
     }
 
     public static class RequestPersistentCache {
-        @Function
+        @defsfn
         public Cache requestPersistentCacheManager() {
             return _cache;
         }
     }
 
     public static class RequestPersistentFlushCache {
-        @Function
+        @defsfn
         public Cache requestPersistentFlushCacheManager() {
             return _flushCache;
         }
@@ -169,7 +169,7 @@ public class Caching {
     public static class CachedStore {
         private final Store storeOp = new Store();
 
-        @Function
+        @defsfn
         @SuppressWarnings("unchecked")
         public Object __cachedStore(Cache cache, @ReadOnly Request request) {
             cache.handleStore(request);
