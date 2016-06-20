@@ -38,14 +38,14 @@
 (def is-collect? (partial fn-name-is 'com.ohua.lang/collect))
 (def is-fetch? (partial fn-name-is 'yauhau.functions/fetch))
 (def is-ite? (partial fn-name-is 'com.ohua.lang/ifThenElse))
-(def is-merge? (partial fn-name-is 'com.ohua.lang/merge))
+(def is-select? (partial fn-name-is 'com.ohua.lang/select))
 (def is-id-op? (partial fn-name-is 'yauhau.functions/identity))
 (def is-packager? (partial fn-name-is 'yauhau.functions/__packageArgs))
 
 
 ;; CREATE SPECIFIC FUNCTIONS
 (defn mk-func-maker [name] (fn [in out] (ir/mk-func name (into [] in) (if (seq? out) (into [] out) out))))
-(def mk-merge (mk-func-maker 'com.ohua.lang/merge))
+(def mk-select (mk-func-maker 'com.ohua.lang/select))
 (def mk-fetch (mk-func-maker 'yauhau.functions/fetch))
 (def mk-id-op (mk-func-maker 'yauhau.functions/identity))
 (defn mk-empty-request [in out] (ir/mk-func 'yauhau.functions/__emptyRequest [in '__constDataSource] out))
@@ -104,6 +104,7 @@
     (unsafe-modify-graph (partial ir/drop-nodes funcs))
     (modify (partial update :label-map (fn [lmap] (dissoc-many lmap (map canonicalize-label-key funcs)))))))
 (def get-graph (fmap :graph get-state))
+(defn state-find-func [id] (fmap (partial filter (comp (partial = id) :id)) get-graph))
 
 
 
@@ -129,44 +130,35 @@
 
 
 (defn wrap-smap-once [{size-op :size-op}
-                      {fetch-args :args
-                        output     :return
-                        :as        function}]
+                      fn-id]
   (mdo
-    [packager-out
-     collect-out
-     tree-out
+    [collect-out
      fetch-out
      smap-in
-     one-to-n-out] <- (state-mk-names 6)
+     one-to-n-out
+     new-fetch-in] <- (state-mk-names 5)
+    [{[f-fetch-arg & rest-fetch-args] :args
+     output     :return
+     :as        function}] <- (state-find-func fn-id)
     [_ & rest-label :as label] <- (state-get-label function)
-    new-fetch-args <- (fmap (partial into []) (state-mk-names (count fetch-args)))
 
     let new-fetch = (-> function
-                        (assoc :args new-fetch-args)
+                        (assoc :args (into [] (cons new-fetch-in rest-fetch-args)))
                         (assoc :return fetch-out))
 
-    _ = (println size-op label)
-
-    packager <- (state-mk-func 'yauhau.functions/__packageArgs fetch-args packager-out)
     first-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-op size-op] one-to-n-out)
-    new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out packager-out] collect-out)
-    tree-builder <- (state-mk-func 'yauhau.functions/__mkReqTreeBranch [collect-out] tree-out)
+    new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out f-fetch-arg] collect-out)
+    tree-builder <- (state-mk-func 'yauhau.functions/__mkReqTreeBranch [collect-out] new-fetch-in)
     new-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-op fetch-out] smap-in)
     new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] output)
 
     ; update the label map
-    (state-label-all-with label [packager first-one-to-n])
+    (state-label-all-with label [first-one-to-n])
     (state-label-all-with
       (if (nil? rest-label) [] rest-label)
       [new-collect tree-builder new-one-to-n new-smap function])
     (state-delete-label function)
-    let _ = (println function)
-    (fmap (comp (partial println "Is the function not in the graph?") empty? (partial filter (partial = function)) :graph) get-state)
-    (unsafe-modify-graph (partial ir/update-graph {function [packager first-one-to-n new-collect tree-builder new-fetch new-one-to-n new-smap]}))
-    (fmap (fn [{graph :graph map :label-map}]
-            (pprint graph)
-            (pprint map)) get-state)))
+    (unsafe-modify-graph (partial ir/update-graph {function [first-one-to-n new-collect tree-builder new-fetch new-one-to-n new-smap]}))))
 
 
 (defn cat-redundant-smap-collects
@@ -344,7 +336,7 @@
                  (ir/drop-node merge-node)))
           graph)))
     ir-graph
-    (filter is-merge? ir-graph)))
+    (filter is-select? ir-graph)))
 
 
 (defn cat-redundant-identities [ir-graph]
@@ -375,15 +367,15 @@
   (loop [merge merge]
     (let [successors (ir/successors merge graph)
           more-bottom (first successors)]
-      (if (and (not (empty? successors)) (is-merge? more-bottom) (= 1 (count (ir/successors more-bottom graph))))
+      (if (and (not (empty? successors)) (is-select? more-bottom) (= 1 (count (ir/successors more-bottom graph))))
         (recur more-bottom)
         merge))))
 
 
 (defn find-upstream-fns-and-merges [merge graph]
   (let [predecessors (set (ir/predecessors merge graph))
-        merges (set/select is-merge? predecessors)
-        non-merges (set/select (comp not is-merge?) predecessors)]
+        merges (set/select is-select? predecessors)
+        non-merges (set/select (comp not is-select?) predecessors)]
 
     (reduce
       (fn [[merges non-merges] [new-merges new-non-merges]]
@@ -394,7 +386,7 @@
 
 
 (defn coerce-merges [ir-graph]
-  (let [all-merges (set (filter is-merge? ir-graph))]
+  (let [all-merges (set (filter is-select? ir-graph))]
     (loop [merges all-merges
            graph ir-graph]
       (if (empty? merges)
@@ -431,34 +423,43 @@
         fetches-to-context
         (persistent!
           (second
-          (st/run-state
-            (mapM
-              (fn [[fetch contexts]]
-                (sequence-m
-                  (for [frame contexts]
-                    (modify #(assoc! % frame (conj (% frame) fetch))))))
-              fetches-in-context)
-            (transient {}))))
+            (st/run-state
+              (mapM
+                (fn [[fetch contexts]]
+                  (sequence-m
+                    (for [frame contexts]
+                      (modify #(assoc! % frame (conj (% frame) (.-id fetch)))))))
+                fetches-in-context)
+              (transient {}))))
         label-stacks (->> fetches-in-context
                           (map second)
-                          (distinct)
-                          (sort-by count)
-                          (reverse))
-        working-order (->> label-stacks
-                           (map peek)
-                           (filter (comp not nil?))
+                          (distinct))
+        working-order (->> (loop [stacks label-stacks
+                                  order (transient [])]
+                             (let [new-order (conj! order (map first stacks))
+                                   new-stacks (filter (comp not empty?) (map rest stacks))]
+                               (if (empty? new-stacks)
+                                 new-order
+                                 (recur new-stacks new-order))))
+                           (persistent!)
+                           (apply concat)
+                           (reverse)
                            (distinct))
+        _ (do
+            (println "Working order" working-order)
+            (println "Fetches to context" fetches-to-context))
         [_
          {new-graph  :graph
           new-labels :label-map}]
         (st/run-state
           (mapM
             (fn [stackframe]
+              (println "Current frame" stackframe)
+              (println "Relevant fetches" (fetches-to-context stackframe))
               (let [context-type (ctxlib/get-ctx stackframe)
                     {rewrite-fn  :rewrite
                      cleaning-fn :clean
                      :as         rewrite} (transformation-map context-type)]
-                (println (fetches-to-context stackframe))
                 (if (nil? rewrite)
                   (return nil)
                   (>>= (mapM (partial rewrite-fn stackframe) (fetches-to-context stackframe)) cleaning-fn))))

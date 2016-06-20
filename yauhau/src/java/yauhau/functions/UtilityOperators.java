@@ -17,8 +17,8 @@ public class UtilityOperators {
 
     public static final class Identity {
         @defsfn
-        public Object identity(@ReadOnly Object input) {
-            return input;
+        public Object[] identity(@ReadOnly Object input) {
+            return (Object []) input;
         }
     }
 

@@ -26,42 +26,84 @@
           (mk-one-to-n 1 ['size1 'coll1] 'smap-in)
           (mk-smap 4 ['smap-in] 'a)
           (mk-fetch 2 ['a] 'b)
-          (mk-collect 3 ['size1 'b] 'c)])
+          (mk-one-to-n 5 ['size1 'size1] 'csize)
+          (mk-collect 3 ['csize 'b] 'c)])
 
 
 (def ir1-ctx-map {0 []
                   1 []
                   4 []
                   2 [(ctxlib/->SmapStackEntry 'size1)]
-                  3 []})
+                  3 []
+                  5 []})
 
 
 (def ir2 [(mk-fetch 0 ['a] ['b])])
 (def ir2-transformed ir2)
 
 
-(def ir3 [(ir/mk-func 'size ['coll1] 'size1)
-          (ir/mk-func 'com.ohua.lang/one-to-n ['size1 'coll1] 'packaged1)
-          (ir/mk-func 'com.ohua.lang/smap ['packaged1] 'data1)
-          (ir/mk-func 'size ['data1] 'size2)
-          (ir/mk-func 'com.ohua.lang/one-to-n ['size2 'data1] 'packaged2)
-          (ir/mk-func 'com.ohua.lang/smap ['packaged2] 'data2)
-          (ir/mk-func 'yauhau.functions/fetch ['data2] 'intermediate1)
-          (ir/mk-func 'com.ohua.lang/collect ['size2 'intermediate1] 'intermediate2)
-          (ir/mk-func 'com.ohua.lang/collect ['size1 'intermediate2] 'result)])
+(def ir3 [(mk-size-fn 0 ['coll1] 'size1)
+          (mk-one-to-n 1 ['size1 'coll1] 'packaged1)
+          (mk-smap 3 ['packaged1] 'data1)
+          (mk-size-fn 4 ['data1] 'size2)
+          (mk-one-to-n 5 ['size2 'data1] 'packaged2)
+          (mk-smap 6 ['packaged2] 'data2)
+          (mk-fetch 7 ['data2] 'intermediate1)
+          (mk-one-to-n 8 ['size2 'size2] 'csize2)
+          (mk-collect 9 ['csize2 'intermediate1] 'intermediate2)
+          (mk-one-to-n 10 ['size1 'size1] 'csize1)
+          (mk-collect 11 ['csize1 'intermediate2] 'result)])
 
 
-(def ir4 [(ir/mk-func 'size ['coll1] 'size1)
-          (ir/mk-func 'com.ohua.lang/one-to-n ['size1 'coll1] 'a)
-          (ir/mk-func 'yauhau.functions/fetch ['a] 'b)
-          (ir/mk-func 'com.ohua.lang/collect ['size1 'b] 'c)
-          (ir/mk-func 'size ['coll2] 'size2)
-          (ir/mk-func 'com.ohua.lang/one-to-n ['size2 'coll2] 'h)
-          (ir/mk-func 'yauhau.functions/fetch ['h] 'i)
-          (ir/mk-func 'com.ohua.lang/collect ['size2 'i] 'j)])
+(def ir3-ctx-map
+  (let [empty-ctx []
+        ctx-1 [(ctxlib/->SmapStackEntry 'size1)]
+        ctx-2 [(ctxlib/->SmapStackEntry 'size1)
+               (ctxlib/->SmapStackEntry 'size2)]]
+    {0 empty-ctx
+     1 empty-ctx
+     3 empty-ctx
+     4 ctx-1
+     5 ctx-1
+     6 ctx-1
+     7 ctx-2
+     8 ctx-1
+     9 ctx-2
+     10 empty-ctx
+     11 ctx-1}))
 
 
-(def is-packager? (partial ir/fn-name-is 'yauhau.functions/__packageArgs))
+(def ir4 [(mk-size-fn 0 ['coll1] 'size1)
+          (mk-one-to-n 1 ['size1 'coll1] 'a)
+          (mk-smap 2 'a 'iterating1)
+          (mk-fetch 3 ['iterating1] 'b)
+          (mk-one-to-n 4 ['size1 'size1] 'csize1)
+          (mk-collect 5 ['csize1 'b] 'c)
+          (mk-size-fn 6 ['c] 'size2)
+          (mk-one-to-n 7 ['size2 'c] 'h)
+          (mk-smap 8 ['h] 'iterating2)
+          (mk-fetch 9 ['iterating2] 'i)
+          (mk-one-to-n 10 ['size2 'size2] 'csize2)
+          (mk-collect 11 ['csize2 'i] 'j)])
+
+(def ir4-ctx
+  (let [empty-ctx []
+        ctx-1 [(ctxlib/->SmapStackEntry 'size1)]
+        ctx-2 [(ctxlib/->SmapStackEntry 'size2)]]
+    {0 empty-ctx
+     1 empty-ctx
+     2 empty-ctx
+     3 ctx-1
+     4 empty-ctx
+     5 ctx-1
+     6 empty-ctx
+     7 empty-ctx
+     8 empty-ctx
+     9 ctx-2
+     10 empty-ctx
+     11 ctx-2}))
+
+
 (def is-collect? (partial ir/fn-name-is 'com.ohua.lang/collect))
 (def is-tree-builder? (partial ir/fn-name-is 'yauhau.functions/__mkReqTreeBranch))
 (def is-fetch? (partial ir/fn-name-is 'yauhau.functions/fetch))
@@ -69,25 +111,24 @@
 (def is-one-to-n? (partial ir/fn-name-is 'com.ohua.lang/one-to-n))
 
 
-(defn expect-escape [graph depth in]
-  (is (< 0 depth))
-  (let [[packager
-         one-to-n
+(defn expect-escape [graph sizes in]
+  (is (not (or (nil? sizes) (empty? sizes))))
+  (let [[one-to-n
          collect
          tree-builder
-         & rest] graph]
-    (is (is-packager? packager))
-    (is (= in (.-args packager)))
+         & rest] graph
+        [mysize & rest-sizes] sizes]
     (is (is-one-to-n? one-to-n))
+    (is (= [mysize mysize] (.-args one-to-n)))
     (is (is-collect? collect))
-    (is (= (.-return packager) (second (.-args collect))))
+    (is (= in (second (.-args collect))))
     (is (is-tree-builder? tree-builder))
     (is (= [(.-return collect)] (.-args tree-builder)))
     (let [[out more-rest] (if (is-fetch? (first rest))
                             (do
-                              (is (= 1 depth))
+                              (is (nil? rest-sizes) "Expected another smap wrapping layer")
                               [(.-return (first rest)) (clojure.core/rest rest)])
-                            (expect-escape rest (dec depth) [(.-return tree-builder)]))
+                            (expect-escape rest rest-sizes (.-return tree-builder)))
           [one-to-n smap & last-rest] more-rest]
       (is (is-one-to-n? one-to-n))
       (is (= (second (.-args one-to-n)) out))
@@ -99,52 +140,19 @@
   (first (fetch-trans/context-rewrite-with {ctxlib/smap-ctx (fetch-trans/->Rewrite fetch-trans/wrap-smap-once return)} graph context-map)))
 
 
-(deftest test-smap-trans-simple-manual
-  (let [transformed (smap-only-rewrite ir1 ir1-ctx-map)
-        size 'size1
-        _ (println transformed)
-        fetchf (first (filter fetch-trans/is-fetch? transformed))
-        _ (println fetchf)
-        fetchindex (.indexOf transformed fetchf)
-        packager (nth transformed (- fetchindex 3))
-        collector (nth transformed (- fetchindex 2))
-        one-to-n (nth transformed (inc fetchindex))
-        smap (nth transformed (+ fetchindex 2))]
-    (is (= 'com.ohua.lang/collect (:name collector)))
-    (is (= 'yauhau.functions/__packageArgs (:name packager)))
-    (is (= size (first (:args one-to-n))))
-    (is (= size (first (:args collector))))
-    (is (= 'yauhau.functions/one-to-n (:name one-to-n)))
-    (is (= 'com.ohua.lang/smap (:name smap)))
-    (is (= (ir/get-return-vars one-to-n) (:args smap))))
-  (is
-    (=
-      (into [] (smap-only-rewrite ir2))
-      ir2-transformed)))
-
-
 (deftest test-smap-trans-simple-automated
   (let [transformed (smap-only-rewrite ir1 ir1-ctx-map)]
-    (println transformed)
-    (expect-escape (drop 3 transformed) 1 ['a])))
+    (pprint transformed)
+    (expect-escape (drop 3 transformed) ['size1] 'a)))
 
 
 (deftest test-smap-trans-nested
-  (let [startindex 6
-        transformed (smap-only-rewrite ir3)]
-    (is (= (:name (first (drop startindex ir3))) 'yauhau.functions/fetch))
-    (is (setlib/subset? (set (remove #(= 'yauhau.functions/fetch (:name %)) ir3)) (set transformed))
-        (expect-escape
-          ['size1 'size2]
-          ['data2] 'intermediate1
-          startindex
-          transformed))))
+  (let [transformed (smap-only-rewrite ir3 ir3-ctx-map)]
+    (pprint transformed)
+    (expect-escape (drop 6 transformed) ['size2 'size1] 'data2)))
 
 
 (deftest test-smap-trans-sequential
-  (let [startindex1 2
-        startindex2 11
-        transformed (smap-only-rewrite ir4)
-        _ (pprint transformed)]
-    (expect-escape ['size1] ['a] 'b startindex1 transformed)
-    (expect-escape ['size2] ['h] 'i startindex2 transformed)))
+  (let [transformed (smap-only-rewrite ir4 ir4-ctx)
+        [_ restgraph] (expect-escape (drop 3 transformed) ['size1] 'iterating1)]
+    (expect-escape (drop 3 restgraph) ['size2] 'iterating2)))

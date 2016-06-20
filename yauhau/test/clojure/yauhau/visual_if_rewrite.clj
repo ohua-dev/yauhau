@@ -23,11 +23,11 @@
 (def ir1 [(mk-if-op [] ['a 'b])
           (trans/mk-fetch ['b] 'c)
           (trans/mk-fetch ['a] 'd)
-          (trans/mk-merge ['c 'd] 'e)])
+          (trans/mk-select ['c 'd] 'e)])
 
 (def ir2 [(mk-if-op [] ['a 'b])
           (trans/mk-fetch ['b] 'c)
-          (trans/mk-merge ['c 'a] 'e)])
+          (trans/mk-select ['c 'a] 'e)])
 
 (def ir3 [(mk-if-op [] ['a 'b])
           (mk-request ['b] 'i)
@@ -35,8 +35,8 @@
           (mk-if-op ['a] ['f 'g])
           (mk-request ['f] 'j)
           (trans/mk-fetch ['j] 'h)
-          (trans/mk-merge ['h 'g] 'd)
-          (trans/mk-merge ['c 'd] 'e)])
+          (trans/mk-select ['h 'g] 'd)
+          (trans/mk-select ['c 'd] 'e)])
 
 
 
@@ -48,8 +48,8 @@
           (mk-if-op ['a] ['f 'g])
           (mk-request ['f] 'l)
           (trans/mk-fetch ['l] 'h)
-          (trans/mk-merge ['h 'g] 'd)
-          (trans/mk-merge ['i 'd] 'e)
+          (trans/mk-select ['h 'g] 'd)
+          (trans/mk-select ['i 'd] 'e)
           (ir/mk-func "consumer" ['e] 'p)])
 
 
@@ -58,7 +58,7 @@
           (mk-request ['c] 'g)
           (trans/mk-fetch ['f] 'c)
           (trans/mk-fetch ['g] 'd)
-          (trans/mk-merge ['d 'a] 'e)])
+          (trans/mk-select ['d 'a] 'e)])
 
 
 (def to-print {2 ir2
