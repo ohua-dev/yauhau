@@ -11,7 +11,9 @@
             [clojure.pprint :refer [pprint]]
             [clojure.set :as setlib]
             [com.ohua.context :as ctxlib]
-            [monads.core :refer [return]]))
+            [monads.core :refer [return]]
+            [clojure.string :refer [join]]
+            [com.ohua.util.visual :refer [print-graph]]))
 
 (defn mk-func-w-name [name] (fn [id args return] (ir/->IRFunc id name args return)))
 (def mk-size-fn (mk-func-w-name 'com.ohua.lang/size))
@@ -102,23 +104,6 @@
      9  ctx-2
      10 empty-ctx
      11 ctx-2}))
-
-
-(defn print-graph [fns]
-  (println
-    (str
-      "(let ["
-      (apply str (interpose "\n      "
-                            (map
-                              (fn [{name :name args :args return :return}]
-                                (str
-                                  (if (symbol? return) return (into [] return))
-                                  " (" name " "
-                                  (apply str (interpose " " args)) ")"))
-                              fns)))
-      "]\n  "
-      (:return (last fns))
-      ")")))
 
 
 (def is-collect? (partial ir/fn-name-is 'com.ohua.lang/collect))
