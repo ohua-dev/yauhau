@@ -1,6 +1,6 @@
 (ns yauhau.run-concurrency-test
   (:require [clojure.test :refer [deftest]]
-            [com.ohua.compile :as o]
+            [com.ohua.lang :as o]
             [yauhau.concurrent-io-transform :as conc-io]
             [clojure.java.shell :refer [sh]]
             [com.ohua.logging :as l])

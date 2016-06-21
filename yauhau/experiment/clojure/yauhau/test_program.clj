@@ -5,7 +5,7 @@
 ;
 
 (ns yauhau.test-program
-  (:require [com.ohua.compile :as o]
+  (:require [com.ohua.lang :as o]
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
             [com.ohua.util.gen :refer [def-sfn def-sfn-dt]]
