@@ -36,8 +36,12 @@
    3 empty-ctx})
 
 (def ir2 [(mk-if 0 [] ['a 'b])
-          (trans/mk-fetch ['b] 'c)
-          (trans/mk-select ['c 'a] 'e)])
+          (mk-fetch 1 ['b] 'c)
+          (mk-select 2 ['c 'a] 'e)])
+
+(def ir2-ctx {0 empty-ctx
+              1 [(ctxlib/->IFStackEntry 0 'b)]
+              2 empty-ctx})
 
 (def ir3 [(mk-if 0 [] ['a 'b])
           (mk-request 1 ['b] 'i)
@@ -72,7 +76,7 @@
 
 
 (def to-print {1 [ir1 ir1-ctx]
-               ;2 ir2
+               2 [ir2 ir2-ctx]
                ;3 ir3
                ;4 ir4
                ;5 ir5
@@ -80,14 +84,15 @@
 
 
 (defn if-only-rewrite [graph context-map]
-  (first (trans/context-rewrite-with {ctxlib/if-ctx (trans/->Rewrite trans/if-rewrite-one return)} graph context-map)))
+  (first (trans/context-rewrite-with {ctxlib/if-ctx (trans/->Rewrite trans/checked-if-rewrite-one return)} graph context-map)))
 
 
 (defn -main []
   (doall
     (map
       (fn [[irnum [ir ctx]]]
-        (let [[transformed _] (if-only-rewrite ir ctx)
+        (let [transformed (if-only-rewrite ir ctx)
+              _ (print-graph transformed)
               ;cat-merges (trans/cat-redundant-merges transformed)
               ;cat-ids (trans/cat-redundant-identities cat-merges)
               ;coerce-merges (trans/coerce-merges cat-ids)
