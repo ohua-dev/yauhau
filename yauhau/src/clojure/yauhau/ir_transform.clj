@@ -78,14 +78,14 @@
 
 
 (def canonicalize-label-key fn-to-id)
-(defn state-mk-name [] (fmap (comp apply :name-gen) get-state))
+(def get-name-gen (fmap :name-gen get-state))
+(def state-mk-name (fmap (fn [a] (a)) get-name-gen))
 (def get-label-map (fmap :label-map get-state))
 (defn state-put-label [key label]
   (modify #(assoc-in % [:label-map (canonicalize-label-key key)] label)))
 (defn unsafe-modify-graph
   "this is unsafe because it only modifies the graph and not the label map"
   [f] (modify #(update % :graph f)))
-(def get-name-gen (fmap :name-gen get-state))
 (defn state-gen-id []
   (mdo
     [elem & gen] <- (fmap :id-gen get-state)
@@ -118,6 +118,30 @@
     (state-delete-labels funcs)))
 (def get-graph (fmap :graph get-state))
 (defn state-find-func [id] (fmap (comp first (partial filter (comp (partial = id) :id))) get-graph))
+(defn state-replace-node
+  ([old new label]
+   (mdo
+     (state-delete-label old)
+     (if (seq? new)
+       (mdo
+         (unsafe-modify-graph (partial ir/update-graph {old new}))
+         (state-label-all-with label new))
+       (mdo
+         (unsafe-modify-graph (partial ir/replace-node old new))
+         (state-put-label new label)))))
+  ([old new]
+   (mdo
+     (state-delete-label old)
+     (cond
+       (not (seq? new)) (throw (Exception. "New nodes need labels"))
+       (empty? new) (return nil)
+       (not (seq? (first new))) (mdo
+                                  let [new-node new-label] = new
+                                  (unsafe-modify-graph (partial ir/replace-node old new-node))
+                                  (state-put-label new-node new-label))
+       :else (mdo
+         (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
+         (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
 
 
@@ -209,12 +233,15 @@
 (defn- gen-empty-for [amount out]
   (mdo
     names <- (sequence-m (repeatedly amount (fn [] (state-mk-names 2))))
-    let outs = (conj (into [] (map second names)) out)
+    let outs = (cons out (map first names))
     inserts <- (fmap (partial apply concat)
                      (mapM
-                       (fn [[fetch-in req-in]]
-                         (lift-m* vector (state-mk-empty-req [req-in] fetch-in) (state-mk-id [fetch-in] out)))
-                       (map cons outs names)))
+                       (fn [[req-in fetch-in fetch-out]]
+                         (lift-m*
+                           vector
+                           (state-mk-empty-req [req-in] fetch-in)
+                           (state-mk-fetch [fetch-in] fetch-out)))
+                       (map conj names outs)))
     let _ = (assert-coll-of-type IRFunc inserts (str (into [] inserts)))
     (return [inserts (last outs)])))
 
@@ -250,7 +277,6 @@
 
 (defn- insert-empties [{if-op :function :as labeled-if} fetches-concerned]
   (mdo
-    name-gen <- get-name-gen
     let _ = (assert-type LabeledFunction labeled-if (str "If op has incorrent type <" (type labeled-if) ">"))
     mapped-to-port <- (mapped-fetches-for-if labeled-if fetches-concerned)
     let _ = (println "Mapped to port:" mapped-to-port)
@@ -258,7 +284,9 @@
     longest-nr = (count longest-fetch-seq)
     _ = (println "Fetch seq is" longest-fetch-seq)
     example-if-stack <- (state-get-label (first longest-fetch-seq))
-    let empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
+    let last-stack-entry = (last example-if-stack)
+    shortened-if-stack = (pop example-if-stack)
+    empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
 
     empties-replacement-map <-
     (fmap persistent!
@@ -269,10 +297,8 @@
                 _ = (assert-number to-gen)
                 _ = (println "generating" to-gen "empty fetches")
                 no-fetches = (zero? (count fetches))
-                out-var = (if no-fetches (name-gen) (.-return (.-function (last fetches))))
-                if-stack = (-> example-if-stack
-                               (pop)
-                               (conj (assoc (last example-if-stack) :arg-id if-port)))
+                out-var <- (if no-fetches state-mk-name (return (.-return (last fetches))))
+                let if-stack = (conj shortened-if-stack (assoc last-stack-entry :arg-id if-port))
                 [generated new-out-var] <- (gen-empty-for to-gen out-var)
                 let _ = (println "Generated" generated)
                 (state-label-all-with if-stack generated)
@@ -296,6 +322,7 @@
             empty-required))
     let _ = (println "Empties replacement map:" empties-replacement-map)
     (unsafe-modify-graph (partial ir/update-graph empties-replacement-map))
+    (fmap (partial visual/print-graph) get-graph)
     (return (first (get empties-replacement-map if-op [if-op])))))
 
 
@@ -335,7 +362,8 @@
              (mdo
                let _ = (println "Parallel fetches" parallel-fetches)
                let [head-fetch & other-fetches] = parallel-fetches
-               all-inputs = (mapcat
+               new-label <- (fmap pop (state-get-label head-fetch))
+               let all-inputs = (mapcat
                               (fn [fetch]
                                 (let [_ (println "current fetch" fetch)
                                       args (.-args fetch)]
@@ -354,7 +382,7 @@
                                  parallel-fetches)
                let all-fns = (concat [merge-fn new-fetch] identity-ops)
                (state-delete-fns other-fetches)
-               (unsafe-modify-graph (partial ir/update-graph {head-fetch all-fns}))))
+               (state-replace-node head-fetch all-fns new-label)))
            fetches)
     (fmap (comp (partial assert-coll-of-type IRFunc) :graph) get-state)
     (return nil)))

@@ -45,26 +45,56 @@
 
 (def ir3 [(mk-if 0 [] ['a 'b])
           (mk-request 1 ['b] 'i)
-          (trans/mk-fetch ['i] 'c)
-          (mk-if 4 ['a] ['f 'g])
-          (mk-request 5 ['f] 'j)
-          (trans/mk-fetch ['j] 'h)
-          (trans/mk-select ['h 'g] 'd)
-          (trans/mk-select ['c 'd] 'e)])
+          (mk-fetch 2 ['i] 'c)
+          (mk-if 3 ['a] ['f 'g])
+          (mk-request 4 ['f] 'j)
+          (mk-fetch 5 ['j] 'h)
+          (mk-select 6 ['h 'g] 'd)
+          (mk-select 7 ['c 'd] 'e)])
 
+
+(def ir3-ctx
+  (let [ctx-1b [(ctxlib/->IFStackEntry 0 'b)]
+        ctx-1a [(ctxlib/->IFStackEntry 0 'a)]
+        ctx-2f (conj ctx-1a (ctxlib/->IFStackEntry 3 'f))]
+    {0 empty-ctx
+     1 ctx-1b
+     2 ctx-1b
+     3 ctx-1a
+     4 ctx-2f
+     5 ctx-2f
+     6 ctx-1a
+     7 empty-ctx}))
 
 
 (def ir4 [(mk-if 0 [] ['a 'b])
           (mk-request 1 ['b] 'j)
-          (trans/mk-fetch ['j] 'c)
+          (mk-fetch 2 ['j] 'c)
           (mk-request 3 ['c] 'k)
-          (trans/mk-fetch ['k] 'i)
+          (mk-fetch 4 ['k] 'i)
           (mk-if 6 ['a] ['f 'g])
           (mk-request 7 ['f] 'l)
-          (trans/mk-fetch ['l] 'h)
-          (trans/mk-select ['h 'g] 'd)
-          (trans/mk-select ['i 'd] 'e)
-          (ir/mk-func "consumer" ['e] 'p)])
+          (mk-fetch 8 ['l] 'h)
+          (mk-select 9 ['h 'g] 'd)
+          (mk-select 10 ['i 'd] 'e)
+          (ir/mk-func 11 'consumer ['e] 'p)])
+
+
+(def ir4-ctx
+  (let [ctx-1b [(ctxlib/->IFStackEntry 0 'b)]
+        ctx-1a [(ctxlib/->IFStackEntry 0 'a)]
+        ctx-2f (conj ctx-1a (ctxlib/->IFStackEntry 6 'f))]
+    {0 empty-ctx
+     1 ctx-1b
+     2 ctx-1b
+     3 ctx-1b
+     4 ctx-1b
+     6 ctx-1a
+     7 ctx-2f
+     8 ctx-2f
+     9 ctx-1a
+     10 empty-ctx
+     11 empty-ctx}))
 
 
 (def ir5 [(mk-if 0 [] ['a 'b])
@@ -75,10 +105,10 @@
           (trans/mk-select ['d 'a] 'e)])
 
 
-(def to-print {1 [ir1 ir1-ctx]
-               2 [ir2 ir2-ctx]
-               ;3 ir3
-               ;4 ir4
+(def to-print {;1 [ir1 ir1-ctx]
+               ;2 [ir2 ir2-ctx]
+               ;3 [ir3 ir3-ctx]
+               4 [ir4 ir4-ctx]
                ;5 ir5
                })
 
