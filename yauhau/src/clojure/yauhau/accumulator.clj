@@ -15,7 +15,7 @@
 
 
 (defn mk-accum-op [inputs outputs]
-  (ir/mk-func (symbol "__accum-fetch") (ensure-vec inputs) (ensure-vec outputs)))
+  (ir/mk-func 'yauhau.functions/__accum-fetch (ensure-vec inputs) (ensure-vec outputs)))
 
 
 (defn mk-accum-for-fetches

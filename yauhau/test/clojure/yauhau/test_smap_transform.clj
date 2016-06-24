@@ -107,7 +107,7 @@
 
 
 (def is-collect? (partial ir/fn-name-is 'com.ohua.lang/collect))
-(def is-tree-builder? (partial ir/fn-name-is 'yauhau.functions/__mkReqTreeBranch))
+(def is-tree-builder? (partial ir/fn-name-is 'yauhau.functions/__mk-req-branch))
 (def is-fetch? (partial ir/fn-name-is 'yauhau.functions/fetch))
 (def is-smap? (partial ir/fn-name-is 'com.ohua.lang/smap-fun))
 (def is-one-to-n? (partial ir/fn-name-is 'com.ohua.lang/one-to-n))

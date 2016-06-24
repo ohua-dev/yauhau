@@ -41,7 +41,7 @@
 (def is-smap? (partial fn-name-is 'com.ohua.lang/smap))
 (def is-one-to-n? (partial fn-name-is 'com.ohua.lang/one-to-n))
 (def is-collect? (partial fn-name-is 'com.ohua.lang/collect))
-(def is-fetch? (partial fn-name-is 'yauhau.functions/fetch))
+(def is-fetch? (fn-name-in #{'fetch 'yauhau.functions/fetch}))
 (def is-ite? (partial fn-name-is 'com.ohua.lang/ifThenElse))
 (def is-select? (partial fn-name-is 'com.ohua.lang/select))
 (def is-id-op? (partial fn-name-is 'yauhau.functions/identity))
@@ -140,8 +140,8 @@
                                   (unsafe-modify-graph (partial ir/replace-node old new-node))
                                   (state-put-label new-node new-label))
        :else (mdo
-         (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
-         (mapM (fn [[node label]] (state-put-label node label)) new))))))
+               (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
+               (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
 
 
@@ -166,9 +166,13 @@
 (def get-returns (partial mapcat ir/get-return-vars))
 
 
-(defn wrap-smap-once [{size-op :size-op}
+(defn wrap-smap-once [{op-id :op-id}
                       fn-id]
   (mdo
+    smap-op <- (state-find-func op-id)
+    graph <- get-graph
+    let otn = (ir/get-producer (first (:args smap-op)) graph)
+    let size-source = (first (.-args otn))
     [collect-out
      fetch-out
      smap-in
@@ -183,10 +187,10 @@
                         (assoc :args (into [] (cons new-fetch-in rest-fetch-args)))
                         (assoc :return fetch-out))
 
-    first-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-op size-op] one-to-n-out)
+    first-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source size-source] one-to-n-out)
     new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out f-fetch-arg] collect-out)
-    tree-builder <- (state-mk-func 'yauhau.functions/__mkReqTreeBranch [collect-out] new-fetch-in)
-    new-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-op fetch-out] smap-in)
+    tree-builder <- (state-mk-func 'yauhau.functions/__mk-req-branch [collect-out] new-fetch-in)
+    new-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source fetch-out] smap-in)
     new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] output)
 
     ; update the label map
@@ -206,14 +210,15 @@
 
 (defn batch-rewrite
   "docstring"
-  [ir-graph]
+  [{ir-graph :graph :as df-ir}]
   (loop [position (ir/first-position ir-graph)
          graph ir-graph]
     (let [[new-position fetch-nodes] (find-next-fetches position)]
       (if (empty? fetch-nodes)
-        (if (vector? graph)
-          graph
-          (into [] graph))
+        (assoc df-ir :graph
+                     (if (vector? graph)
+                       graph
+                       (into [] graph)))
         (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
               outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
               accum (acc/mk-accum-op inputs outputs)
@@ -311,6 +316,7 @@
                 replacement-head <-
                 (if no-fetches
                   (mdo
+                    if-port-name <- (fmap (fn [op] (nth (:return op) if-port)) (state-find-func if-op))
                     null <- (state-mk-func
                               'yauhau.functions/__constNull
                               [^{:in-idx -1} if-port]
@@ -339,7 +345,7 @@
   (fmap #(contains? % fn) state-get-if-handled-fns))
 
 
-(defn- unchecked-if-rewrite-one [{if-op :if-op}]
+(defn- unchecked-if-rewrite-one [{if-op :op-id}]
   (mdo
     label <- (state-get-label if-op)
     resolved-func <- (state-find-func if-op)
@@ -364,11 +370,11 @@
                let [head-fetch & other-fetches] = parallel-fetches
                new-label <- (fmap pop (state-get-label head-fetch))
                let all-inputs = (mapcat
-                              (fn [fetch]
-                                (let [_ (println "current fetch" fetch)
-                                      args (.-args fetch)]
-                                  (assert-count 1 args)))
-                              parallel-fetches)
+                                  (fn [fetch]
+                                    (let [_ (println "current fetch" fetch)
+                                          args (.-args fetch)]
+                                      (assert-count 1 args)))
+                                  parallel-fetches)
                [merge-out fetch-out] <- (state-mk-names 2)
                merge-fn <- (state-mk-select all-inputs merge-out)
                new-fetch <- (state-mk-fetch [merge-out] fetch-out)
@@ -501,12 +507,23 @@
    ctxlib/smap-ctx (->Rewrite wrap-smap-once return)})
 
 
-(defn- unwind-context- [transformation-map ir-graph label-map]
+(defn- trans-map-to-trigger-map [trans-map]
+  (apply hash-map
+         (mapcat
+           (fn [[ctx rewrite]]
+             (mapcat
+               (fn [marker] [marker rewrite])
+               (.-begin-markers ctx)))
+           trans-map)))
+
+
+(defn- unwind-context- [transformation-map {ir-graph :graph label-map :ctxt-map}]
   (let [name-gen (mk-name-gen-func ir-graph)
         id-gen (iterate inc (apply max (map :id ir-graph)))
         fetches-in-context (->> ir-graph
                                 (map (fn [a] [a (get label-map (.-id a))]))
                                 (filter #(and (is-fetch? (first %)) (not (empty? (second %))))))
+        trigger-map (trans-map-to-trigger-map transformation-map)
         fetches-to-context
         (persistent!
           (second
@@ -534,7 +551,8 @@
                            (distinct))
         _ (do
             (println "Working order" working-order)
-            (println "Fetches to context" fetches-to-context))
+            (println "Fetches to context" fetches-to-context)
+            (println label-map))
         [_
          {new-graph  :graph
           new-labels :label-map}]
@@ -543,10 +561,9 @@
             (fn [stackframe]
               (println "Current frame" stackframe)
               (println "Relevant fetches" (fetches-to-context stackframe))
-              (let [context-type (ctxlib/get-ctx stackframe)
-                    {rewrite-fn  :rewrite
+              (let [{rewrite-fn  :rewrite
                      cleaning-fn :clean
-                     :as         rewrite} (transformation-map context-type)]
+                     :as         rewrite} (trigger-map (:type stackframe))]
                 (if (nil? rewrite)
                   (return nil)
                   (>>= (mapM (partial rewrite-fn stackframe) (fetches-to-context stackframe)) cleaning-fn))))
@@ -555,13 +572,16 @@
            :label-map label-map
            :name-gen  name-gen
            :id-gen    id-gen})]
-    [new-graph new-labels]))
+    (println "Rewrote context")
+    (visual/print-graph new-graph)
+    (ir/->IR new-graph new-labels)))
 
 
 (def context-rewrite-with unwind-context-)
 
 
-(def context-rewrite (partial context-rewrite-with transformation-map))
+(defn context-rewrite [graph]
+  (unwind-context- transformation-map graph))
 
 
 (defn- log-transformation-at [name]
@@ -581,11 +601,14 @@
   [
    ; TODO change to tree builders
    ;insert-leaf-builders
-   ; FIXME coerce smap and if-rewrite, they need run together
    context-rewrite
    (validate-and-log "context-rewrite")
    batch-rewrite
-   (validate-and-log "batch-rewrite")])
+   (validate-and-log "batch-rewrite")
+   (fn [{graph :graph :as g}]
+     (println "Applied transformations")
+     (visual/print-graph graph)
+     g)])
 
 
 (def full-transform (apply comp (reverse transformations)))
