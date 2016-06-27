@@ -11,7 +11,9 @@
             [clojure.pprint :refer [pprint]]
             [clojure.set :as setlib]
             [com.ohua.context :as ctxlib]
-            [monads.core :refer [return]]))
+            [monads.core :refer [return]]
+            [clojure.string :refer [join]]
+            [com.ohua.util.visual :refer [print-graph]]))
 
 (defn mk-func-w-name [name] (fn [id args return] (ir/->IRFunc id name args return)))
 (def mk-size-fn (mk-func-w-name 'com.ohua.lang/size))
@@ -60,22 +62,22 @@
         ctx-1 [(ctxlib/->SmapStackEntry 'size1)]
         ctx-2 [(ctxlib/->SmapStackEntry 'size1)
                (ctxlib/->SmapStackEntry 'size2)]]
-    {0 empty-ctx
-     1 empty-ctx
-     3 empty-ctx
-     4 ctx-1
-     5 ctx-1
-     6 ctx-1
-     7 ctx-2
-     8 ctx-1
-     9 ctx-2
+    {0  empty-ctx
+     1  empty-ctx
+     3  empty-ctx
+     4  ctx-1
+     5  ctx-1
+     6  ctx-1
+     7  ctx-2
+     8  ctx-1
+     9  ctx-2
      10 empty-ctx
      11 ctx-1}))
 
 
 (def ir4 [(mk-size-fn 0 ['coll1] 'size1)
           (mk-one-to-n 1 ['size1 'coll1] 'a)
-          (mk-smap 2 'a 'iterating1)
+          (mk-smap 2 ['a] 'iterating1)
           (mk-fetch 3 ['iterating1] 'b)
           (mk-one-to-n 4 ['size1 'size1] 'csize1)
           (mk-collect 5 ['csize1 'b] 'c)
@@ -90,16 +92,16 @@
   (let [empty-ctx []
         ctx-1 [(ctxlib/->SmapStackEntry 'size1)]
         ctx-2 [(ctxlib/->SmapStackEntry 'size2)]]
-    {0 empty-ctx
-     1 empty-ctx
-     2 empty-ctx
-     3 ctx-1
-     4 empty-ctx
-     5 ctx-1
-     6 empty-ctx
-     7 empty-ctx
-     8 empty-ctx
-     9 ctx-2
+    {0  empty-ctx
+     1  empty-ctx
+     2  empty-ctx
+     3  ctx-1
+     4  empty-ctx
+     5  ctx-1
+     6  empty-ctx
+     7  empty-ctx
+     8  empty-ctx
+     9  ctx-2
      10 empty-ctx
      11 ctx-2}))
 
@@ -154,5 +156,6 @@
 
 (deftest test-smap-trans-sequential
   (let [transformed (smap-only-rewrite ir4 ir4-ctx)
+        _ (print-graph transformed)
         [_ restgraph] (expect-escape (drop 3 transformed) ['size1] 'iterating1)]
-    (expect-escape (drop 3 restgraph) ['size2] 'iterating2)))
+    (expect-escape (drop 5 restgraph) ['size2] 'iterating2)))

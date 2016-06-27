@@ -14,7 +14,7 @@
             [com.ohua.context :as ctxlib :refer [->LabeledFunction]]
             [monads.core :refer [mdo return modify >>= get-state]]
             [monads.state :as st]
-            [monads.util :as mutil :refer [sequence-m]]
+            [monads.util :as mutil :refer [sequence-m fold-m lift-m*]]
             [clojure.algo.generic.functor :refer [fmap]]
             [clojure.pprint :as pprint])
   (:import (com.ohua.ir IRFunc IRGraphPosition)
@@ -27,6 +27,11 @@
 
 (defn trace [thing]
   (println thing)
+  thing)
+
+
+(defn trace-with [msg thing]
+  (println msg thing)
   thing)
 
 
@@ -52,6 +57,11 @@
 (defn mk-const-nil [in out] (ir/mk-func 'yauhau.functions/__constNull in out))
 
 
+(defmulti fn-to-id type)
+(defmethod fn-to-id IRFunc [f] (.-id f))
+(defmethod fn-to-id Long [id] id)
+
+
 (defn- next-var-name [name-gen]
   (loop [[name & new :as state] @name-gen]
     (if (compare-and-set! name-gen state new)
@@ -62,20 +72,20 @@
 (defn mk-name-gen-func [ir-graph] (partial next-var-name (atom (ir/name-gen-from-graph ir-graph))))
 
 
-(defn mapM [comp seq] (sequence-m (map comp seq)))
+(defn mapM [comp & seqs] (sequence-m (apply map comp seqs)))
 
 (defn dissoc-many [map keys] (persistent! (reduce dissoc! (transient map) keys)))
 
 
-(defn- canonicalize-label-key [key] (if (= (type key) IRFunc) (:id key) key))
-(defn state-mk-name [] (fmap (comp apply :name-gen) get-state))
+(def canonicalize-label-key fn-to-id)
+(def get-name-gen (fmap :name-gen get-state))
+(def state-mk-name (fmap (fn [a] (a)) get-name-gen))
 (def get-label-map (fmap :label-map get-state))
 (defn state-put-label [key label]
   (modify #(assoc-in % [:label-map (canonicalize-label-key key)] label)))
 (defn unsafe-modify-graph
   "this is unsafe because it only modifies the graph and not the label map"
   [f] (modify #(update % :graph f)))
-(def get-name-gen (fmap :name-gen get-state))
 (defn state-gen-id []
   (mdo
     [elem & gen] <- (fmap :id-gen get-state)
@@ -87,14 +97,17 @@
     name-gen <- (fmap :name-gen get-state)
     (return (into [] (repeatedly n name-gen)))))
 (defn state-label-all-with [label fns]
-  (mapM #(state-put-label % label) fns))
+  (modify (fn [state] (update state :label-map (partial merge (zipmap (map fn-to-id fns) (repeat label)))))))
 (defn state-delete-label [key]
   (modify (fn [state] (update state :label-map #(dissoc % (canonicalize-label-key key))))))
+(defn state-delete-labels [keys]
+  (modify (fn [state] (update state :label-map #(dissoc-many % (map canonicalize-label-key keys))))))
 (defn state-get-label [key]
   (fmap #(get % (canonicalize-label-key key)) get-label-map))
-(def state-mk-merge (partial state-mk-func 'com.ohua.lang/merge))
+(def state-mk-select (partial state-mk-func 'com.ohua.lang/select))
 (def state-mk-fetch (partial state-mk-func 'yauhau.functions/fetch))
 (def state-mk-id (partial state-mk-func 'yauhau.functions/identity))
+(def state-mk-empty-req (partial state-mk-func 'yauhau.funtions/__emptyRequest))
 (defn state-delete-fn [func]
   (mdo
     (unsafe-modify-graph (partial ir/drop-node func))
@@ -102,9 +115,33 @@
 (defn state-delete-fns [funcs]
   (mdo
     (unsafe-modify-graph (partial ir/drop-nodes funcs))
-    (modify (partial update :label-map (fn [lmap] (dissoc-many lmap (map canonicalize-label-key funcs)))))))
+    (state-delete-labels funcs)))
 (def get-graph (fmap :graph get-state))
-(defn state-find-func [id] (fmap (partial filter (comp (partial = id) :id)) get-graph))
+(defn state-find-func [id] (fmap (comp first (partial filter (comp (partial = id) :id))) get-graph))
+(defn state-replace-node
+  ([old new label]
+   (mdo
+     (state-delete-label old)
+     (if (seq? new)
+       (mdo
+         (unsafe-modify-graph (partial ir/update-graph {old new}))
+         (state-label-all-with label new))
+       (mdo
+         (unsafe-modify-graph (partial ir/replace-node old new))
+         (state-put-label new label)))))
+  ([old new]
+   (mdo
+     (state-delete-label old)
+     (cond
+       (not (seq? new)) (throw (Exception. "New nodes need labels"))
+       (empty? new) (return nil)
+       (not (seq? (first new))) (mdo
+                                  let [new-node new-label] = new
+                                  (unsafe-modify-graph (partial ir/replace-node old new-node))
+                                  (state-put-label new-node new-label))
+       :else (mdo
+         (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
+         (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
 
 
@@ -137,9 +174,9 @@
      smap-in
      one-to-n-out
      new-fetch-in] <- (state-mk-names 5)
-    [{[f-fetch-arg & rest-fetch-args] :args
-     output     :return
-     :as        function}] <- (state-find-func fn-id)
+    {[f-fetch-arg & rest-fetch-args] :args
+     output                          :return
+     :as                             function} <- (state-find-func fn-id)
     [_ & rest-label :as label] <- (state-get-label function)
 
     let new-fetch = (-> function
@@ -153,7 +190,7 @@
     new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] output)
 
     ; update the label map
-    (state-label-all-with label [first-one-to-n])
+    (state-put-label first-one-to-n label)
     (state-label-all-with
       (if (nil? rest-label) [] rest-label)
       [new-collect tree-builder new-one-to-n new-smap function])
@@ -193,122 +230,172 @@
             new-graph))))))
 
 
-(defn- gen-empty-for [amount out name-gen]
-  (first
-    (reduce
-      (fn [[acc out] _]
-        (let [fetch-in (name-gen)
-              req-in (name-gen)]
-          [(->> acc
-                (cons (mk-fetch [fetch-in] out))
-                (cons (mk-empty-request req-in fetch-in)))
-           req-in]))
-      ['() out]
-      (range amount))))
-
-
-(defn- get-fetches-concerned [labeled-functions curr-if]
-  (filter
-    (fn [func]
-      (and
-        (is-fetch? (.-function func))
-        (not (empty? (.-label func)))
-        (let [found-if (.-if_op (peek (.-label func)))]
-          (assert-type (type curr-if) found-if)
-          (= curr-if found-if))))
-    labeled-functions))
-
-
-(defn- mapped-fetches-for-if [labeled-graph curr-if]
-  (let [fetches-concerned (get-fetches-concerned labeled-graph curr-if)
-        _ (doall (map (partial assert-type LabeledFunction) labeled-graph))
-        _ (assert-type LabeledFunction curr-if)]
-    (if-not (empty? fetches-concerned) (assert-type LabeledFunction (first fetches-concerned)))
-    (merge
-      (zipmap (ir/get-return-vars (.-function curr-if)) (repeat []))
-      (group-by #(.-arg_id (peek (.-label %))) fetches-concerned))))
-
-
-(defn- calc-empties [if-op]
+(defn- gen-empty-for [amount out]
   (mdo
-    label-map <- get-label-map
-    name-gen <- get-name-gen
-    let mapped-to-port = (mapped-fetches-for-if (vals label-map) if-op)
-    longest-fetch-seq = (apply max-key count (vals mapped-to-port))
+    names <- (sequence-m (repeatedly amount (fn [] (state-mk-names 2))))
+    let outs = (cons out (map first names))
+    inserts <- (fmap (partial apply concat)
+                     (mapM
+                       (fn [[req-in fetch-in fetch-out]]
+                         (lift-m*
+                           vector
+                           (state-mk-empty-req [req-in] fetch-in)
+                           (state-mk-fetch [fetch-in] fetch-out)))
+                       (map conj names outs)))
+    let _ = (assert-coll-of-type IRFunc inserts (str (into [] inserts)))
+    (return [inserts (last outs)])))
+
+
+(defn- get-fetches-concerned [curr-if]
+  (mdo
+    {graph :graph label-map :label-map} <- get-state
+    (return
+      (filter
+        (fn [func]
+          (let [_ (assert-type IRFunc func)
+                label (label-map (canonicalize-label-key func))]
+            (and
+              (is-fetch? func)
+              (not (empty? label))
+              (let [found-if (.-if_op (peek label))
+                    _ (println "if op is" (.-if_op (peek label)) "Current if is" (.-id (.-function curr-if)))]
+                (= (.-id (.-function curr-if)) found-if)))))
+        graph))))
+
+
+(defn- mapped-fetches-for-if
+  ([curr-if] (>>= (get-fetches-concerned curr-if) (partial mapped-fetches-for-if curr-if)))
+  ([curr-if fetches-concerned]
+   (mdo
+     label-map <- get-label-map
+     let _ = (println "Fetches concerned:" fetches-concerned)
+     _ = (assert-type LabeledFunction curr-if "Current if has incorrect type")
+     (return (merge
+               (zipmap (ir/get-return-vars (.-function curr-if)) (repeat []))
+               (group-by #(trace-with "found arg id" (.-arg_id (peek (label-map (canonicalize-label-key %))))) fetches-concerned))))))
+
+
+(defn- insert-empties [{if-op :function :as labeled-if} fetches-concerned]
+  (mdo
+    let _ = (assert-type LabeledFunction labeled-if (str "If op has incorrent type <" (type labeled-if) ">"))
+    mapped-to-port <- (mapped-fetches-for-if labeled-if fetches-concerned)
+    let _ = (println "Mapped to port:" mapped-to-port)
+    let longest-fetch-seq = (apply max-key count (vals mapped-to-port))
     longest-nr = (count longest-fetch-seq)
-    example-if-stack = (.-label (first longest-fetch-seq))
+    _ = (println "Fetch seq is" longest-fetch-seq)
+    example-if-stack <- (state-get-label (first longest-fetch-seq))
+    let last-stack-entry = (last example-if-stack)
+    shortened-if-stack = (pop example-if-stack)
     empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
 
-    (-> empty-required
-        (map
-          (fn [[if-port fetches]]
-            (let [to-gen (- longest-nr (count fetches))]
-              (assert-number to-gen)
-              (let [no-fetches (zero? (count fetches))
-                    out-var (if no-fetches (name-gen) (.-return (.-function (last fetches))))
-                    if-stack (-> example-if-stack
-                                 (pop)
-                                 (conj (assoc (last example-if-stack) :arg-id if-port)))
-                    generated (gen-empty-for to-gen out-var name-gen)
-                    empties (map #(->LabeledFunction % if-stack) generated)
-                    _ (assert-coll empties)
-                    _ (assert-type IRFunc (.-function (first empties)))
-                    in-var (first (.-args (.-function (first empties))))
-                    _ (assert-type LabeledFunction if-op)
-                    to-replace (if no-fetches if-op (last fetches))
-
-                    replacement-head
-                    (if no-fetches
-                      [if-op (->LabeledFunction (mk-const-nil [^{:in-idx -1} if-port] (first (.-args (first generated)))) if-stack)]
-                      [(assoc-in (last fetches) [:function :return] in-var)])]
-                [to-replace (into [] (concat replacement-head empties))]))))
-        (map-from-coll)
-        (return))))
-
-
-(defn insert-empties [labeled-if]
-  (mdo
-    let empties-replacement-map = (calc-empties labeled-if)
-    _ = (assert-map empties-replacement-map)
+    empties-replacement-map <-
+    (fmap persistent!
+          (fold-m
+            (fn [m [if-port fetches]]
+              (mdo
+                let to-gen = (- longest-nr (count fetches))
+                _ = (assert-number to-gen)
+                _ = (println "generating" to-gen "empty fetches")
+                no-fetches = (zero? (count fetches))
+                out-var <- (if no-fetches state-mk-name (return (.-return (last fetches))))
+                let if-stack = (conj shortened-if-stack (assoc last-stack-entry :arg-id if-port))
+                [generated new-out-var] <- (gen-empty-for to-gen out-var)
+                let _ = (println "Generated" generated)
+                (state-label-all-with if-stack generated)
+                ;_ = (assert-coll empties)
+                ;_ = (assert-type IRFunc (.-function (first empties)))
+                let in-var = (first (.-args (first generated)))
+                to-replace = (if no-fetches if-op (last fetches))
+                _ = (println "fetch end" (last fetches))
+                _ = (assert-coll-of-type IRFunc fetches)
+                replacement-head <-
+                (if no-fetches
+                  (mdo
+                    null <- (state-mk-func
+                              'yauhau.functions/__constNull
+                              [^{:in-idx -1} if-port]
+                              (first (.-args (first generated))))
+                    (return [if-op null]))
+                  (return [(assoc (last fetches) :return in-var)]))
+                (return (assoc! m to-replace (into [] (concat replacement-head generated))))))
+            (transient {})
+            empty-required))
+    let _ = (println "Empties replacement map:" empties-replacement-map)
     (unsafe-modify-graph (partial ir/update-graph empties-replacement-map))
-    (return (first (get empties-replacement-map labeled-if [labeled-if])))))
+    (fmap (partial visual/print-graph) get-graph)
+    (return (first (get empties-replacement-map if-op [if-op])))))
 
 
-(defn if-rewrite-one [label func]
+(def ^:private state-get-if-handled-fns (fmap (comp :handled-functions :if-rewrite-private-state) get-state))
+(defn- state-add-if-handled-fns [fns] (modify (fn [state] (update-in state [:if-rewrite-private-state :handled-functions] (partial setlib/union (set (map fn-to-id fns)))))))
+(def ^:private state-init-if-handled-fns
+  (fmap
+    (fn [state]
+      (if (:handled-functions (:if-rewrite-private-state state))
+        state
+        (assoc-in state [:if-rewrite-private-state :handled-functions] #{})))
+    get-state))
+(defn state-is-fn-if-handled? [fn]
+  (fmap #(contains? % fn) state-get-if-handled-fns))
+
+
+(defn- unchecked-if-rewrite-one [{if-op :if-op}]
   (mdo
-    let labeled-if = (ctxlib/->LabeledFunction func label)
-    labeled-if <- (insert-empties labeled-if)
-    all-labels <- (fmap vals get-label-map)
+    label <- (state-get-label if-op)
+    resolved-func <- (state-find-func if-op)
+    let labeled-if = (ctxlib/->LabeledFunction resolved-func label)
+    direct-fetches-concerned <- (get-fetches-concerned labeled-if)
+    (state-add-if-handled-fns direct-fetches-concerned)
+    let _ = (assert (not (nil? resolved-func)) "If op not present in graph")
+    new-op <- (insert-empties labeled-if direct-fetches-concerned)
+    let labeled-if = (ctxlib/->LabeledFunction new-op label)
     let _ = (assert-type LabeledFunction labeled-if)
     curr-if = (.-function labeled-if)
     _ = (assert-type IRFunc curr-if)
-    mapped-to-port = (mapped-fetches-for-if all-labels labeled-if)
-    fetches = (vals mapped-to-port)
+    (fmap pprint get-graph)
+    mapped-to-port <- (mapped-fetches-for-if labeled-if)
+    let fetches = (vals mapped-to-port)
+    _ = (println "Mapped to port" mapped-to-port)
     if-stack = (.-label labeled-if)
-    (mapM
-      (fn [& parallel-fetches]
-        (mdo
-          let [head-fetch & other-fetches] = parallel-fetches
-          all-inputs = (mapcat
-                         (fn [fetch]
-                           (let [args (.-args (.-function fetch))]
-                             (assert-count 1 args)))
-                         parallel-fetches)
-          [merge-out fetch-out] <- (state-mk-names 2)
-          merge-fn <- (state-mk-merge all-inputs merge-out)
-          new-fetch <- (state-mk-fetch [merge-out] fetch-out)
-          identity-ops <- (mapM
-                            (fn [{{ret :return} :function
-                                  fetch-label   :label}]
-                              (state-mk-id [^{:out-idx -1} (.-arg_id (last fetch-label))
-                                            ^{:out-idx 0} fetch-out]
-                                           ret))
-                            parallel-fetches)
-          let all-fns = (concat [merge new-fetch] identity-ops)
-          (state-delete-fns other-fetches)
-          (unsafe-modify-graph (partial ir/replace-node head-fetch all-fns))
-          ))
-      fetches)))
+    (apply mapM
+           (fn [& parallel-fetches]
+             (mdo
+               let _ = (println "Parallel fetches" parallel-fetches)
+               let [head-fetch & other-fetches] = parallel-fetches
+               new-label <- (fmap pop (state-get-label head-fetch))
+               let all-inputs = (mapcat
+                              (fn [fetch]
+                                (let [_ (println "current fetch" fetch)
+                                      args (.-args fetch)]
+                                  (assert-count 1 args)))
+                              parallel-fetches)
+               [merge-out fetch-out] <- (state-mk-names 2)
+               merge-fn <- (state-mk-select all-inputs merge-out)
+               new-fetch <- (state-mk-fetch [merge-out] fetch-out)
+               identity-ops <- (mapM
+                                 (fn [{ret :return :as fun}]
+                                   (mdo
+                                     label <- (state-get-label fun)
+                                     (state-mk-id [^{:out-idx -1} (.-arg_id (last label))
+                                                   ^{:out-idx 0} fetch-out]
+                                                  ret)))
+                                 parallel-fetches)
+               let all-fns = (concat [merge-fn new-fetch] identity-ops)
+               (state-delete-fns other-fetches)
+               (state-replace-node head-fetch all-fns new-label)))
+           fetches)
+    (fmap (comp (partial assert-coll-of-type IRFunc) :graph) get-state)
+    (return nil)))
+
+
+(defn checked-if-rewrite-one [op func]
+  (mdo
+    state-init-if-handled-fns
+    has-been-handled <- (state-is-fn-if-handled? func)
+    (if has-been-handled
+      (return nil)
+      (unchecked-if-rewrite-one op))))
+
 
 (defn insert-leaf-builders [ir-graph]
   (let [name-gen (mk-name-gen-func ir-graph)]
@@ -410,7 +497,7 @@
 
 (def transformation-map
   ; TODO add actual clean functions
-  {ctxlib/if-ctx   (->Rewrite if-rewrite-one return)
+  {ctxlib/if-ctx   (->Rewrite checked-if-rewrite-one return)
    ctxlib/smap-ctx (->Rewrite wrap-smap-once return)})
 
 
