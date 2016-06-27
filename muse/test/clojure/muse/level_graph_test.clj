@@ -14,11 +14,11 @@
 
 (defrecord GetData [id done args]
   DataSource
-  (fetch [_]
+  (fetch [this]
     (prom/promise
       (fn [resolve reject]
         ;(assoc this fetched true)
-        (println "fetching ...")
+        (println "fetching ..." (:id this) (:args this))
         (resolve "foo"))
       )
     )
@@ -47,7 +47,7 @@
   )
 
 (defn get-data [id & args]
-  (println "get-data called:" args)
+  (println "get-data called. id:" id "args:" args)
   (GetData. id (atom false) args))
 
 (defn compute [& args]
@@ -106,7 +106,7 @@
                      ;(m/return (compute- local-10 local-11))
                      (get-data local-10 local-11)
                      ))
-  ))
+           ))
 
 (deftest experiment-one-level
   (let [result (run!!
@@ -148,3 +148,25 @@
                          (m/return local-7)))]
     (println "result:" result)
     ))
+
+(defn fun-1 []
+  (run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
+    (m/mlet [[local-10 local-11] (<$> clojure.core/vector (get-data "foo1" 100) (get-data "foo2" 200))
+             ;_ (<$> println "output:" local-10) ; not executed at all :(
+             ;_ (println "output:" local-10) ; not executed at all :(
+             ]
+            (println "output:" local-10)
+            (get-data "inner-foo" local-11))) ; apparently also not called. but GetData records returned.
+  )
+
+(defn fun-2 []
+  (run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
+    (m/mlet [[local-10 local-11] (<$> clojure.core/vector (get-data "foo3" 300) (get-data "foo4" 400))]
+            (m/return (compute- local-10 local-11)))) ; apparently also not called. but GetData records returned.
+  )
+
+
+(deftest experiment-nested-runs
+  (println
+    (run!!
+      (get-data "outer-foo" (fun-1 ) (fun-2)))))
