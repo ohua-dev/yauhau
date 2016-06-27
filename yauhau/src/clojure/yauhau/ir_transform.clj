@@ -12,14 +12,14 @@
             [clojure.pprint :refer [pprint]]
             [com.ohua.util.visual :as visual]
             [com.ohua.context :as ctxlib :refer [->LabeledFunction]]
-            [monads.core :refer [mdo return modify >>= get-state]]
+            [monads.core :refer [mdo return modify >>= get-state put-state]]
             [monads.state :as st]
             [monads.util :as mutil :refer [sequence-m fold-m lift-m*]]
             [clojure.algo.generic.functor :refer [fmap]]
             [clojure.pprint :as pprint])
   (:import (com.ohua.ir IRFunc IRGraphPosition)
            (com.ohua.context LabeledFunction IFStackEntry SmapStackEntry)
-           (clojure.lang PersistentArrayMap)
+           (clojure.lang PersistentArrayMap PersistentVector)
            (com.ohua.context LabeledFunction))
   (:use com.ohua.util.ir
         com.ohua.util.assert
@@ -77,6 +77,30 @@
 (defn dissoc-many [map keys] (persistent! (reduce dissoc! (transient map) keys)))
 
 
+(defn reindex-preserving [target thing]
+  (first
+    (st/run-state
+      (mapM
+        (fn [item]
+          (let [prev-index (get (meta item) target)]
+            (if (nil? prev-index)
+              (mdo
+                index <- get-state
+                (modify inc)
+                (return (vary-meta item assoc target index)))
+              (mdo
+                (put-state (inc prev-index))
+                (return item)))))
+        thing)
+      0)))
+(defn mk-func-and-index [id name args return]
+  (ir/->IRFunc id name
+               (into [] (ir/reindex-stuff :in-idx args))
+               (if (seq? return)
+                 (into [] (ir/reindex-stuff :out-idx return))
+                 (vary-meta return assoc :out-idx -1))))
+
+
 (def canonicalize-label-key fn-to-id)
 (def get-name-gen (fmap :name-gen get-state))
 (def state-mk-name (fmap (fn [a] (a)) get-name-gen))
@@ -86,12 +110,12 @@
 (defn unsafe-modify-graph
   "this is unsafe because it only modifies the graph and not the label map"
   [f] (modify #(update % :graph f)))
-(defn state-gen-id []
+(def state-gen-id
   (mdo
     [elem & gen] <- (fmap :id-gen get-state)
     (modify #(assoc % :id-gen gen))
     (return elem)))
-(defn state-mk-func [name args return_] (fmap (fn [id] (ir/->IRFunc id name args return_)) (state-gen-id)))
+(defn state-mk-func [name args return_] (fmap (fn [id] (mk-func-and-index id name args return_)) state-gen-id))
 (defn state-mk-names [n]
   (mdo
     name-gen <- (fmap :name-gen get-state)
@@ -143,7 +167,7 @@
                (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
                (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
-
+(defn get-largest-id [ir-graph] (apply max (map :id ir-graph)))
 
 (defn find-next-fetches
   "docstring"
@@ -172,7 +196,7 @@
     smap-op <- (state-find-func op-id)
     graph <- get-graph
     let otn = (ir/get-producer (first (:args smap-op)) graph)
-    let size-source = (first (.-args otn))
+    let size-source = (vary-meta (first (.-args otn)) dissoc :in-idx)
     [collect-out
      fetch-out
      smap-in
@@ -184,14 +208,17 @@
     [_ & rest-label :as label] <- (state-get-label function)
 
     let new-fetch = (-> function
-                        (assoc :args (into [] (cons new-fetch-in rest-fetch-args)))
-                        (assoc :return fetch-out))
+                        (assoc :args (reindex-preserving :in-idx (cons new-fetch-in rest-fetch-args)))
+                        (assoc :return (vary-meta fetch-out assoc :out-idx -1)))
 
     first-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source size-source] one-to-n-out)
     new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out f-fetch-arg] collect-out)
     tree-builder <- (state-mk-func 'yauhau.functions/__mk-req-branch [collect-out] new-fetch-in)
     new-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source fetch-out] smap-in)
     new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] output)
+
+    let _ = (println (meta size-source))
+    _ = (println (map meta (:args first-one-to-n)))
 
     ; update the label map
     (state-put-label first-one-to-n label)
@@ -212,16 +239,17 @@
   "docstring"
   [{ir-graph :graph :as df-ir}]
   (loop [position (ir/first-position ir-graph)
-         graph ir-graph]
+         graph ir-graph
+         new-id (inc (get-largest-id ir-graph))]
     (let [[new-position fetch-nodes] (find-next-fetches position)]
       (if (empty? fetch-nodes)
         (assoc df-ir :graph
                      (if (vector? graph)
                        graph
                        (into [] graph)))
-        (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
+          (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
               outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
-              accum (acc/mk-accum-op inputs outputs)
+              accum (ir/->IRFunc new-id 'yauhau.functions/__accum-fetch inputs outputs)
               fetches-removed (remove (set fetch-nodes) graph)
               new-graph (into [] (conj fetches-removed accum))
               new-dependencies (setlib/union (.dependencies new-position) (set outputs))
@@ -232,7 +260,8 @@
               (ir/next-satisfied new-graph new-dependencies new-visited)
               new-visited
               new-dependencies)
-            new-graph))))))
+            new-graph
+            (inc new-id)))))))
 
 
 (defn- gen-empty-for [amount out]
@@ -519,7 +548,7 @@
 
 (defn- unwind-context- [transformation-map {ir-graph :graph label-map :ctxt-map}]
   (let [name-gen (mk-name-gen-func ir-graph)
-        id-gen (iterate inc (apply max (map :id ir-graph)))
+        id-gen (iterate inc (inc (get-largest-id ir-graph)))
         fetches-in-context (->> ir-graph
                                 (map (fn [a] [a (get label-map (.-id a))]))
                                 (filter #(and (is-fetch? (first %)) (not (empty? (second %))))))

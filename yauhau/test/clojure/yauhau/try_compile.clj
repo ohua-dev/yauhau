@@ -22,7 +22,7 @@
 
 (deftest test-smap
   (let [data-source (IncDataSource. (int 0))
-        v (map int [1 2 3])
+        v (into [] (map int [1 2 3]))
         result (compile
                  (smap
                    (algo [a] (fetch (mk-req a data-source)))
