@@ -7,7 +7,8 @@
 package yauhau;
 
 
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * Represents a request that needs to be executed.
@@ -17,9 +18,19 @@ import java.util.Objects;
  * <p>
  * Created by justusadam on 11/02/16.
  */
-public final class Request<P, R> {
+public final class Request<P, R> extends RequestTree {
     private final P payload;
     private final IDataSource<P, R> dataSource;
+
+    @Override
+    public Stream<Request> getRequestsStream() {
+        return Collections.singletonList((Request) this).stream();
+    }
+
+    @Override
+    public Iterable<Object> buildResult(Map<Request, Object> responses) {
+        return Collections.singletonList(responses.get(this));
+    }
 
     public Request(P payload, IDataSource<P, R> dataSource) {
         this.payload = payload;

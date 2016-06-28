@@ -10,6 +10,7 @@ import com.ohua.lang.compile.analysis.qual.ReadOnly;
 import com.ohua.lang.defsfn;
 import yauhau.IDataSource;
 import yauhau.Request;
+import yauhau.RequestTree;
 import yauhau.util.SimpleSelect;
 import yauhau.util.Triple;
 import yauhau.util.Tuple;
@@ -54,8 +55,9 @@ public class AccumOp {
 
     public static class AccumulateAndFetch extends Accumulation {
         @defsfn
-        public Object[] __accumFetch(@ReadOnly Request... requests) {
-            Map<Object, Set<Request>> mappedRequests = super.__accum(requests).stream().collect(
+        public Object[] __accumFetch(@ReadOnly RequestTree... requests) {
+            Request[] rqarr = Arrays.stream(requests).flatMap(RequestTree::getRequestsStream).toArray(Request[]::new);
+            Map<Object, Set<Request>> mappedRequests = super.__accum(rqarr).stream().collect(
                     Collectors.toMap(
                             Tuple::get1,
                             (Tuple<Object, Set<Triple<Integer, Request, Integer>>> t) ->
@@ -63,7 +65,7 @@ public class AccumOp {
             );
 
 
-            Map<Object, IDataSource> mappedSources = Arrays.stream(requests)
+            Map<Object, IDataSource> mappedSources = Arrays.stream(requests).flatMap(RequestTree::getRequestsStream)
                     .map(Request::getDataSource).collect(Collectors.toMap(
                             IDataSource::getIdentifier,
                             java.util.function.Function.identity(),
@@ -90,7 +92,7 @@ public class AccumOp {
                     Tuple::get1,
                     Tuple::get2
             ));
-            Object[] result = Arrays.stream(requests).map(finishedRequests::get).toArray();
+            Object[] result = Arrays.stream(requests).map(r -> r.buildResult(finishedRequests)).toArray();
             IO_ROUND_COUNTER++;
             System.out.println("Executing accum");
             System.out.println(Arrays.toString(result));

@@ -249,7 +249,7 @@
                        (into [] graph)))
           (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
               outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
-              accum (ir/->IRFunc new-id 'yauhau.functions/__accum-fetch inputs outputs)
+              accum (mk-func-and-index new-id 'yauhau.functions/__accum-fetch inputs outputs)
               fetches-removed (remove (set fetch-nodes) graph)
               new-graph (into [] (conj fetches-removed accum))
               new-dependencies (setlib/union (.dependencies new-position) (set outputs))
