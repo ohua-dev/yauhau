@@ -94,8 +94,6 @@ public class AccumOp {
             ));
             Object[] result = Arrays.stream(requests).map(r -> r.buildResult(finishedRequests)).toArray();
             IO_ROUND_COUNTER++;
-            System.out.println("Executing accum");
-            System.out.println(Arrays.toString(result));
             return result;
         }
     }

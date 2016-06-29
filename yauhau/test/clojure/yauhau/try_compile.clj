@@ -33,3 +33,35 @@
     (is
       1
       (.-counter data-source))))
+
+
+(deftest test-if
+  (let [data-source (IncDataSource. (int 0))
+        v [(int 2)]
+        result (compile
+                 (if (even? (int 6))
+                     (fetch (mk-req (int 0) data-source))
+                     (fetch (mk-req (int 1) data-source))))]
+    (is
+      1
+      result)
+    (is
+      1
+      (.-counter data-source))))
+
+
+(deftest test-if-smap
+  (let [data-source (IncDataSource. (int 0))
+        v (into [] (map int [1 2 3]))
+        result (compile
+                 (smap
+                   (algo [a] (if (even? a)
+                               (fetch (mk-req (int 0) data-source))
+                               (fetch (mk-req (int 1) data-source))))
+                   v))]
+    (is
+      [1 2 1]
+      result)
+    (is
+      1
+      (.-counter data-source))))

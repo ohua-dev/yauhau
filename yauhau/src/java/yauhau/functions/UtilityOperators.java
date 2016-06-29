@@ -18,7 +18,10 @@ public class UtilityOperators {
     public static final class Identity {
         @defsfn
         public Object[] identity(@ReadOnly Object input) {
-            return (Object []) input;
+            if (input instanceof Object[])
+                return (Object []) input;
+            else
+                return new Object[] {input};
         }
     }
 
@@ -29,19 +32,19 @@ public class UtilityOperators {
         }
     }
 
-    public static final class MkReqLeaf {
-        @defsfn
-        public RequestTree __mkReqTreeLeaf(@ReadOnly Request request) {
-            return new RequestTreeLeaf(request);
-        }
-    }
+//    public static final class MkReqLeaf {
+//        @defsfn
+//        public RequestTree __mkReqTreeLeaf(@ReadOnly Request request) {
+//            return new RequestTreeLeaf(request);
+//        }
+//    }
 
-    public static final class MkReqMultiLeaf {
-        @defsfn
-        public RequestTreeMultiLeaf __mkReqMultiLeaf(@ReadOnly Iterable<Request> requests) {
-            return new RequestTreeMultiLeaf(requests);
-        }
-    }
+//    public static final class MkReqMultiLeaf {
+//        @defsfn
+//        public RequestTreeMultiLeaf __mkReqMultiLeaf(@ReadOnly Iterable<Request> requests) {
+//            return new RequestTreeMultiLeaf(requests);
+//        }
+//    }
 
     public static final class PackageArgs {
         @defsfn

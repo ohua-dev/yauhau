@@ -114,7 +114,7 @@
 
 
 (defn if-only-rewrite [graph context-map]
-  (first (trans/context-rewrite-with {ctxlib/if-ctx (trans/->Rewrite trans/checked-if-rewrite-one return)} graph context-map)))
+  (first (trans/context-rewrite-with {'if (trans/->Rewrite trans/checked-if-rewrite-one return)} graph context-map)))
 
 
 (defn -main []

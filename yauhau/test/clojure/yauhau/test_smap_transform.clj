@@ -139,7 +139,7 @@
 
 
 (defn smap-only-rewrite [graph context-map]
-  (first (fetch-trans/context-rewrite-with {ctxlib/smap-ctx (fetch-trans/->Rewrite fetch-trans/wrap-smap-once return)} graph context-map)))
+  (first (fetch-trans/context-rewrite-with {'com.ohua.lang/smap-fun (fetch-trans/->Rewrite fetch-trans/wrap-smap-once return)} graph context-map)))
 
 
 (deftest test-smap-trans-simple-automated
