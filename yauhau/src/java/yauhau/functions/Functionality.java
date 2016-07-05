@@ -248,7 +248,7 @@ public class Functionality {
 
     public static class Computation {
         @defsfn
-        public String compute(@ReadOnly Object[] deps, long timeOut) throws InterruptedException {
+        public String compute(@ReadOnly Object... deps) throws InterruptedException {
 //      Thread.sleep(timeOut);
             return "foo";
         }
@@ -256,7 +256,7 @@ public class Functionality {
 
     public static class VariableDestructuring {
         @defsfn
-        public Object[] vector(Object[] deps) throws InterruptedException {
+        public Object[] vector(Object... deps) throws InterruptedException {
             return deps;
         }
     }

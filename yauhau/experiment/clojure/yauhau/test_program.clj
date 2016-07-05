@@ -14,9 +14,17 @@
             [yauhau.concurrent-io-transform :as conc-io]
             [clojure.test :refer [deftest]]
             [clojure.repl :refer [source]]
-            [com.ohua.logging :as l])
+            [com.ohua.logging :as l]
+            [clojure.java.io :refer [file make-parents delete-file]]
+            [clojure.string :as string])
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
+
+(defn trace [thing]
+  (println thing)
+  thing)
+
+(enable-compilation-logging)
 
 ;(defprotocol IGenericPayload
 ;  (equals [other-payload]))
@@ -100,7 +108,7 @@
                                           (.setProperty "execution-mode"
                                                         (.name (com.ohua.engine.RuntimeProcessConfiguration$Parallelism/MULTI_THREADED)))
                                           (.setProperty "core-thread-pool-size" "5")
-                                          (.setProperty "max-thread-pool-size" "5")  
+                                          (.setProperty "max-thread-pool-size" "5") 
                                           )))
      ))
 
@@ -137,6 +145,83 @@
                            #(AccumOp/IO_ROUND_COUNTER))]
     (clojure.pprint/print-table results)
     (spit "test/yauhau-applicative.json" (to-json results))))
+
+
+(defn run-one-if-test [basenamespace filename]
+  (let [namespace (symbol (str
+                            basenamespace
+                            "."
+                            (string/replace
+                              filename
+                              #"\_"
+                              "-")))
+        _ (println "Running test for" namespace)
+        results
+        (run-tests (prepare-ns namespace #'ohua)
+                   #(set! Functionality/IO_FETCH_COUNTER 0)
+                   #(set! AccumOp/IO_ROUND_COUNTER 0)
+                   #(Functionality/IO_FETCH_COUNTER)
+                   #(AccumOp/IO_ROUND_COUNTER))]
+    (remove-ns namespace)
+    results))
+
+
+(defn get-opt [m key flag]
+  (if-let [v (m key)]
+    [flag (str v)]))
+
+
+(defn experiment-yauhau [exp-type codestyle gen-conf]
+  (let [basefolder (str "yauhau/experiment/clojure/generated/yauhau/" exp-type "/" codestyle "/")
+        basenamespace (str "generated.yauhau." exp-type "." codestyle)
+        g (partial get-opt gen-conf)]
+    (println "cleaning...")
+    (make-parents (str basefolder "abc"))
+    (doseq [f (.listFiles (file basefolder))]
+      (delete-file f))
+    (println "generating...")
+    (apply
+      generate-graphs
+      (concat
+        (g :%ifs "--percentageifs")
+        (g :#graphs "-n")
+        (g :lang "-L")
+        (g :#lvls "-l")
+        (g :seed "-s")
+        (g :%maps "--percentagemaps")
+        (g :%funs "--percentagefuns")
+        (g :%sources "--percentagesources")
+        (if (contains? gen-conf :+slow) "--slodatasource")
+        ["-o" (str basefolder)]))
+    (println "finished generating")
+    (let [results
+          (into []
+            (mapcat
+              (fn [f]
+                (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
+                  (run-one-if-test basenamespace (second m))))
+              (seq (trace (.listFiles (file basefolder))))))]
+      (clojure.pprint/print-table results)
+      (spit (str "test/yauhau-" exp-type "-" codestyle ".json") (to-json results)))))
+
+
+(deftest experiment-yauhau-with-if
+  (let [base-gen-conf {:%ifs 1
+                       :#graphs 7
+                       :#lvls 7
+                       :seed 123456}]
+
+    (doall (map (fn [style lang] (experiment-yauhau "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
+
+(deftest experiment-yauhau-with-func
+  (let [base-gen-conf {:%ifs 0.3
+                       :#graphs 7
+                       :#lvls 7
+                       :seed 123456
+                       :%maps 0.3
+                       :%funs 0.3}]
+
+    (doall (map (fn [style lang] (experiment-yauhau "func" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
 
 ;(deftest experiment-if
 ;  (generate-graphs

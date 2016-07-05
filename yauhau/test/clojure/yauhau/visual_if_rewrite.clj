@@ -122,7 +122,7 @@
     (map
       (fn [[irnum [ir ctx]]]
         (let [transformed (if-only-rewrite ir ctx)
-              _ (print-graph transformed)
+              _ (println (graph-to-str transformed))
               ;cat-merges (trans/cat-redundant-merges transformed)
               ;cat-ids (trans/cat-redundant-identities cat-merges)
               ;coerce-merges (trans/coerce-merges cat-ids)

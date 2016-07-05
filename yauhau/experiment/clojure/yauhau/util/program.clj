@@ -23,15 +23,14 @@
     (yauhau.functions Functionality AccumOp)
     (com.ohua.lang.compile FlowGraphCompiler)))
 
-
-(def code-gen-executable "../rand-code-graph/dist/build/random-level-graphs/random-level-graphs")
+(def code-gen-executable "../rand-code-graph/.stack-work/install/x86_64-osx/lts-6.4/7.10.3/bin/random-level-graphs")
 
 
 (defmacro get-data [& args]
   (if (and (< (count args) 3)
            (not (symbol? (second (reverse args)))))
     `(yauhau.functions/fetch
-       (yauhau.functions/read-request (into-array Object [~@args])))
+       (yauhau.functions/read-request ~@args))
     `(yauhau.functions/fetch
        (yauhau.functions/read-request ~@args))
     )
@@ -49,7 +48,7 @@
 
 (defmacro compute [& args]
   (if (< (count args) 2)
-    `(yauhau.functions/compute (into-array Object []) ~@args)
+    `(yauhau.functions/compute ~@args)
     `(yauhau.functions/compute ~@args)
     )
   )
@@ -66,6 +65,9 @@
   )
 
 
+(def level-name-regex #".*\_level([0-9]*).*")
+
+
 (defn prepare-ns [name compiler]
   (let [ns (create-ns name)
         interned-get-data (intern name (with-meta 'get-data {:macro true}) @#'get-data)
@@ -78,19 +80,20 @@
         ;_ (println "level-test?" *ns*)
         ; make sure the linker context knows the namespace of the stateful functions
         _ (require '[clojure.core :refer :all])
-        _ (require '[com.ohua.lang])
+        _ (require '[com.ohua.lang :refer [defalgo]])
         _ (com.ohua.link/link ['yauhau.functions])
 
         _ (set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS true)
         _ (set! FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)
 
         ; finally force to load the function in the file to the namespace
+        _ (println name)
         _ (require name)
         _ (in-ns (symbol curr-ns))
         ;_ (println "test-program?" *ns*)
 
         fns (ns-publics name)]
-    (filter (fn [[f-name _]] (not (some #{f-name} '(get-data slow-get-data compute write-data ohua)))) fns)))
+    (filter (fn [[f-name _]] (re-find #"run\_test\_level\d+(\_\d+)?" (str f-name))) fns)))
 
 
 (def to-json ch/generate-string)
@@ -98,7 +101,6 @@
 
 (defn generate-graphs [& args] (apply sh code-gen-executable args))
 
-(def level-name-regex #".*\_level([0-9]*).*")
 
 (defn levels-from-fname [f-name]
   (second (re-find (re-matcher level-name-regex (name f-name)))))

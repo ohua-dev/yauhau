@@ -189,7 +189,7 @@
                (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
                (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
-(defn get-largest-id [ir-graph] (apply max (map :id ir-graph)))
+(defn get-largest-id [ir-graph] (apply max (remove nil? (map :id ir-graph))))
 
 (defn find-next-fetches
   "docstring"
@@ -399,7 +399,7 @@
             empty-required))
     let _ = (l/printline "Empties replacement map:" empties-replacement-map)
     (unsafe-modify-graph (partial ir/update-graph empties-replacement-map))
-    (fmap (partial visual/print-graph) get-graph)
+    (fmap (comp l/printline (partial visual/graph-to-str)) get-graph)
     (return (first (get empties-replacement-map if-op [if-op])))))
 
 
@@ -591,6 +591,9 @@
   (let [name-gen (mk-name-gen-func ir-graph)
         id-gen (iterate inc (inc (get-largest-id ir-graph)))
 
+        _ (l/printline label-map)
+        _ (assert-map label-map)
+
         fetches-in-context (->> ir-graph
                                 (map (fn [a] [a (label-map (.-id a))]))
                                 (filter #(and (is-fetch? (first %)) (not (empty? (second %))))))
@@ -638,7 +641,7 @@
                     (>>= (rewrite-fn stackframe) cleaning-fn))
                   graph <- get-graph
                   let _ = (l/printline "Graph after rewriting" (:type stackframe) (:op-id stackframe))
-                  _ = (visual/print-graph graph)
+                  _ = (l/log-graph graph)
                   (return nil))))
             working-order)
           {:graph     ir-graph
@@ -649,6 +652,20 @@
 
 
 (def context-rewrite-with unwind-context-)
+
+
+(defn gen-ids [{ir-graph :graph :as ir}]
+  (let [id-gen (iterate inc (inc (get-largest-id ir-graph)))
+        new-graph (first
+                    (st/run-state
+                      (mapM
+                        (fn [func]
+                          (if (nil? (.-id func))
+                            (fmap #(assoc func :id %) state-gen-id)
+                            (return func)))
+                        ir-graph)
+                      {:id-gen id-gen}))]
+    (assoc ir :graph new-graph)))
 
 
 (defn context-rewrite [graph]
@@ -669,21 +686,21 @@
 
 
 (def transformations
-  [
-   (fn [{graph :graph :as g}]
+  [(fn [{graph :graph :as g}]
      (l/printline "Before transformations")
-     (visual/print-graph graph)
+     (l/log-graph graph)
      g)
+  gen-ids
    ; TODO change to tree builders
    ;insert-leaf-builders
-   context-rewrite
-   (validate-and-log "context-rewrite")
-   batch-rewrite
-   (validate-and-log "batch-rewrite")
-   (fn [{graph :graph :as g}]
-     (l/printline "Applied transformations")
-     (visual/print-graph graph)
-     g)])
+  context-rewrite
+  (validate-and-log "context-rewrite")
+  batch-rewrite
+  (validate-and-log "batch-rewrite")
+  (fn [{graph :graph :as g}]
+    (l/printline "Applied transformations")
+    (l/log-graph graph)
+    g)])
 
 
 (def full-transform (apply comp (reverse transformations)))

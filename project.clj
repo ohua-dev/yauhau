@@ -26,7 +26,7 @@
 
                         ; paths for Clojure test cases
                         :test-paths ["yauhau/test/clojure" "muse/test/clojure" "yauhau/experiment/clojure"]
-                        :java-source-paths ["yauhau/test/java"]
+                        :java-source-paths ["yauhau/test/java" "yauhau/experiment/java"]
                         ; we use funcool's release of muse because it has functioning support for the monad library of cats.
                         ; they did not make a release to clojars yet so we include the jar here.
                         :resource-paths ["resources/muse-0.4.0.jar"]}}
@@ -45,4 +45,3 @@
   ; we can't use the :omit-source option because it also looses the Clojure sources.
   ; I filed a bug on this: https://github.com/kumarshantanu/lein-javac-resources/issues/1
   :jar-exclusions [#"\.java$"])
-

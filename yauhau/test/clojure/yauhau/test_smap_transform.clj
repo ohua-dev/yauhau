@@ -13,7 +13,7 @@
             [com.ohua.context :as ctxlib]
             [monads.core :refer [return]]
             [clojure.string :refer [join]]
-            [com.ohua.util.visual :refer [print-graph]]))
+            [com.ohua.logging :as l]))
 
 (defn mk-func-w-name [name] (fn [id args return] (ir/->IRFunc id name args return)))
 (def mk-size-fn (mk-func-w-name 'com.ohua.lang/size))
@@ -156,6 +156,6 @@
 
 (deftest test-smap-trans-sequential
   (let [transformed (smap-only-rewrite ir4 ir4-ctx)
-        _ (print-graph transformed)
+        _ (l/log-graph transformed)
         [_ restgraph] (expect-escape (drop 3 transformed) ['size1] 'iterating1)]
     (expect-escape (drop 5 restgraph) ['size2] 'iterating2)))
