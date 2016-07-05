@@ -222,6 +222,7 @@ public class Functionality {
         @defsfn
         @SuppressWarnings("unchecked")
         public Request readRequest(@ReadOnly Object... deps) {
+            System.out.println("Executing read request");
             READ_REQUEST_COUNTER++;
             return new Request(new GenericPayload((long) deps[deps.length - 1], (String) deps[deps.length - 2]), _mySource);
         }

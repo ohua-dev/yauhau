@@ -79,30 +79,12 @@
 (defmacro ohua [& args]
   `(o/ohua
      ~@args
-     :compile-with-config {:df-transformations [
-                                                ; batch rewrite
-                                                ~@yauhau.ir-transform/transformations
-
-                                                ; concurrent batch I/O rewrite
-                                                ; conc-io/rewrite
-
-                                                ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
-                                                ]}))
+     :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
 (defmacro ohua-conc [& args]
   `(o/ohua
      ~@args
-     :compile-with-config {:df-transformations [
-                                                ; batch rewrite
-                                                ~@yauhau.ir-transform/transformations
-
-                                                ; concurrent batch I/O rewrite
-                                                ; conc-io/rewrite
-
-                                                ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
-                                                ]}
+     :compile-with-config {:df-transformations yauhau.ir-transform/transformations}
      :run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
                         (.setProperties (doto (new java.util.Properties)
                                           (.setProperty "execution-mode"
@@ -175,24 +157,24 @@
   (let [basefolder (str "yauhau/experiment/clojure/generated/yauhau/" exp-type "/" codestyle "/")
         basenamespace (str "generated.yauhau." exp-type "." codestyle)
         g (partial get-opt gen-conf)]
-    (println "cleaning...")
-    (make-parents (str basefolder "abc"))
-    (doseq [f (.listFiles (file basefolder))]
-      (delete-file f))
-    (println "generating...")
-    (apply
-      generate-graphs
-      (concat
-        (g :%ifs "--percentageifs")
-        (g :#graphs "-n")
-        (g :lang "-L")
-        (g :#lvls "-l")
-        (g :seed "-s")
-        (g :%maps "--percentagemaps")
-        (g :%funs "--percentagefuns")
-        (g :%sources "--percentagesources")
-        (if (contains? gen-conf :+slow) "--slodatasource")
-        ["-o" (str basefolder)]))
+    ; (println "cleaning...")
+    ; (make-parents (str basefolder "abc"))
+    ; (doseq [f (.listFiles (file basefolder))]
+    ;   (delete-file f))
+    ; (println "generating...")
+    ; (apply
+    ;   generate-graphs
+    ;   (concat
+    ;     (g :%ifs "--percentageifs")
+    ;     (g :#graphs "-n")
+    ;     (g :lang "-L")
+    ;     (g :#lvls "-l")
+    ;     (g :seed "-s")
+    ;     (g :%maps "--percentagemaps")
+    ;     (g :%funs "--percentagefuns")
+    ;     (g :%sources "--percentagesources")
+    ;     (if (contains? gen-conf :+slow) "--slodatasource")
+    ;     ["-o" (str basefolder)]))
     (println "finished generating")
     (let [results
           (into []

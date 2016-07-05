@@ -13,7 +13,7 @@
   :deploy-repositories [["releases" {:url "https://clojars.org/repo" :creds :gpg}]]
 
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [ohua/ohua "0.6.2"]
+                 ;[ohua/ohua "0.6.2"]
                  [bwo/monads "0.2.2"]]
 
   :profiles {:provided {:dependencies [[org.clojure/clojure "1.8.0"]]}
@@ -31,7 +31,7 @@
                         ; they did not make a release to clojars yet so we include the jar here.
                         :resource-paths ["resources/muse-0.4.0.jar"]}}
 
-  :resource-paths ["resources/ohua-0.6.2.jar"]
+  :resource-paths ["resources/ohua-0.6.3-SNAPSHOT-standalone.jar"]
 
   :source-paths ["yauhau/src/clojure"]
   :java-source-paths ["yauhau/src/java"]
