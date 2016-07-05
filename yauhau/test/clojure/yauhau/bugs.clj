@@ -1,4 +1,4 @@
-(ns yauhau.one-to-n-bug
+(ns yauhau.bugs
   (:require [com.ohua.lang :refer [ohua defalgo]]
             [yauhau.ir-transform]
             [clojure.test :refer [deftest]]))

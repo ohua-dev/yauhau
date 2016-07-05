@@ -24,7 +24,7 @@
   (println thing)
   thing)
 
-(enable-compilation-logging)
+; (enable-compilation-logging)
 
 ;(defprotocol IGenericPayload
 ;  (equals [other-payload]))
@@ -157,24 +157,24 @@
   (let [basefolder (str "yauhau/experiment/clojure/generated/yauhau/" exp-type "/" codestyle "/")
         basenamespace (str "generated.yauhau." exp-type "." codestyle)
         g (partial get-opt gen-conf)]
-    ; (println "cleaning...")
-    ; (make-parents (str basefolder "abc"))
-    ; (doseq [f (.listFiles (file basefolder))]
-    ;   (delete-file f))
-    ; (println "generating...")
-    ; (apply
-    ;   generate-graphs
-    ;   (concat
-    ;     (g :%ifs "--percentageifs")
-    ;     (g :#graphs "-n")
-    ;     (g :lang "-L")
-    ;     (g :#lvls "-l")
-    ;     (g :seed "-s")
-    ;     (g :%maps "--percentagemaps")
-    ;     (g :%funs "--percentagefuns")
-    ;     (g :%sources "--percentagesources")
-    ;     (if (contains? gen-conf :+slow) "--slodatasource")
-    ;     ["-o" (str basefolder)]))
+    (println "cleaning...")
+    (make-parents (str basefolder "abc"))
+    (doseq [f (.listFiles (file basefolder))]
+      (delete-file f))
+    (println "generating...")
+    (apply
+      generate-graphs
+      (concat
+        (g :%ifs "--percentageifs")
+        (g :#graphs "-n")
+        (g :lang "-L")
+        (g :#lvls "-l")
+        (g :seed "-s")
+        (g :%maps "--percentagemaps")
+        (g :%funs "--percentagefuns")
+        (g :%sources "--percentagesources")
+        (if (contains? gen-conf :+slow) "--slodatasource")
+        ["-o" (str basefolder)]))
     (println "finished generating")
     (let [results
           (into []
@@ -182,7 +182,7 @@
               (fn [f]
                 (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
                   (run-one-if-test basenamespace (second m))))
-              (seq (trace (.listFiles (file basefolder))))))]
+              (seq (.listFiles (file basefolder)))))]
       (clojure.pprint/print-table results)
       (spit (str "test/yauhau-" exp-type "-" codestyle ".json") (to-json results)))))
 
@@ -200,7 +200,6 @@
                        :#graphs 7
                        :#lvls 7
                        :seed 123456
-                       :%maps 0.3
                        :%funs 0.3}]
 
     (doall (map (fn [style lang] (experiment-yauhau "func" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))

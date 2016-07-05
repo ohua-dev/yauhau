@@ -2,16 +2,14 @@ package yauhau.functions;
 
 import com.ohua.lang.defsfn;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 public class Vector {
 
-    public Vector () {
-        System.out.println("Allocating vector");
-    }
-
     @defsfn
     public Iterable mvector (Object... args) {
-        System.out.println("Building vector");
+        if (null == args)
+            return new ArrayList();
         return Arrays.asList(args);
     }
 
