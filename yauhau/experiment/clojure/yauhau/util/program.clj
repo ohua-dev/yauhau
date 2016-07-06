@@ -22,11 +22,9 @@
   (:import
     ;(com.ohua.fetch IDataSource)
     ;       (java.util Arrays)
-    (yauhau.functions Functionality AccumOp)
-    (com.ohua.lang.compile FlowGraphCompiler)))
+    (yauhau.functions Functionality AccumOp))
 
 (def code-gen-executable "../rand-code-graph/.stack-work/install/x86_64-osx/lts-6.4/7.10.3/bin/random-level-graphs")
-
 
 (defmacro get-data [& args]
   (if (and (< (count args) 3)

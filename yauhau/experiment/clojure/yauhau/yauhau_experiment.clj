@@ -18,7 +18,10 @@
             [clojure.java.io :refer [file make-parents delete-file]]
             [clojure.string :as string])
   (:use yauhau.util.program)
-  (:import (yauhau.functions Functionality AccumOp)))
+  (:import (yauhau.functions Functionality AccumOp)
+           (com.ohua.lang.compile FlowGraphCompiler)))
+
+(set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS false)
 
 (defn trace [thing]
   (println thing)
@@ -77,12 +80,12 @@
 
 
 (defmacro ohua [& args]
-  `(o/ohua
+  `(o/<-ohua
      ~@args
      :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
 (defmacro ohua-conc [& args]
-  `(o/ohua
+  `(o/<-ohua
      ~@args
      :compile-with-config {:df-transformations yauhau.ir-transform/transformations}
      :run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
