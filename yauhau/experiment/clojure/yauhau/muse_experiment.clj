@@ -21,7 +21,7 @@
     (prom/promise
       (fn fetch-fn [resolve reject]
         ;(println "fetching ...")
-        (swap! IO_FETCHED_COUNTER inc)
+        ; (swap! IO_FETCHED_COUNTER inc)
         (swap! IO_BATCHED_COUNTER inc)
         (resolve "foo"))
       )
@@ -33,8 +33,8 @@
       (fn fetch-multi-fn [resolve reject]
         ;(println "batched fetching ..." requests (map (fn [_] "foo") requests))
         ;(resolve (into [] (map (fn [_] "foo") requests)))
+        ; (swap! IO_FETCHED_COUNTER #(+ % (count requests)))
         (swap! IO_BATCHED_COUNTER inc)
-        (swap! IO_FETCHED_COUNTER inc)
         (resolve "one")
         ))
     )
@@ -45,7 +45,8 @@
 
 (defn get-data [& args]
   ;(println "get-data called:" args)
-  (GetData. 100))
+  (swap! IO_FETCHED_COUNTER inc)
+  (GetData. args))
 
 (defn mcompute [& args]
   ; do nothing and return a dummy
