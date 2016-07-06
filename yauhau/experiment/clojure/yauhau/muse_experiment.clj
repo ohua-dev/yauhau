@@ -10,7 +10,7 @@
     [promesa.core :as prom]
     [muse.core :as muse :refer :all]
     [cats.core :as m]
-    [yauhau.util.program :refer [generate-graphs run-tests to-json]]))
+    [yauhau.util.program :refer [generate-graphs run-tests to-json run-experiment]]))
 
 (def IO_FETCHED_COUNTER (atom 0))
 (def IO_BATCHED_COUNTER (atom 0))
@@ -19,7 +19,7 @@
   DataSource
   (fetch [_]
     (prom/promise
-      (fn [resolve reject]
+      (fn fetch-fn [resolve reject]
         ;(println "fetching ...")
         (swap! IO_FETCHED_COUNTER inc)
         (swap! IO_BATCHED_COUNTER inc)
@@ -30,7 +30,7 @@
   BatchedSource
   (fetch-multi [this requests]
     (prom/promise
-      (fn [resolve reject]
+      (fn fetch-multi-fn [resolve reject]
         ;(println "batched fetching ..." requests (map (fn [_] "foo") requests))
         ;(resolve (into [] (map (fn [_] "foo") requests)))
         (swap! IO_BATCHED_COUNTER inc)
@@ -78,38 +78,79 @@
         fns (ns-publics name)]
     (filter (fn [[f-name _]] (not (some #{f-name} '(get-data compute)))) fns)))
 
-(deftest experiment-monad
-  (println "generation result:" (generate-graphs
-    "--percentageifs" "0"
-    "-n" "400"
-    "-o" "com.ohua.fetch/test/clojure/generated/muse_monad.clj"
-    "-L" "MuseMonad"
-    "-l" "20"
-    "-s" "12345"))
-  (let [results (run-tests (prepare-muse-ns 'generated.muse-monad #'mcompute)
+
+(defn monad-runner [namespace]
+  (run-tests (prepare-muse-ns namespace #'mcompute)
                            #(swap! IO_FETCHED_COUNTER (fn [_] 0))
                            #(swap! IO_BATCHED_COUNTER (fn [_] 0))
                            (fn [] @IO_FETCHED_COUNTER)
-                           (fn [] @IO_BATCHED_COUNTER))]
-    (clojure.pprint/print-table results)
-    (spit "test/muse-monad.json" (to-json results))))
+                           (fn [] @IO_BATCHED_COUNTER)))
 
 
-(deftest experiment-applicative
-  (println "generation result:" (generate-graphs
-    "--percentageifs" "0"
-    "-n" "400"
-    "-o" "com.ohua.fetch/test/clojure/generated/muse_applicative.clj"
-    "-L" "MuseApp"
-    "-l" "20"
-    "-s" "12345"))
-  (let [results (run-tests (prepare-muse-ns 'generated.muse-applicative #'compute)
-                           #(swap! IO_FETCHED_COUNTER (fn [_] 0))
-                           #(swap! IO_BATCHED_COUNTER (fn [_] 0))
-                           (fn [] @IO_FETCHED_COUNTER)
-                           (fn [] @IO_BATCHED_COUNTER))]
-    (clojure.pprint/print-table results)
-    (spit "test/muse-applicative.json" (to-json results))))
+
+(defn applicative-runner [namespace]
+  (run-tests (prepare-muse-ns namespace #'compute)
+                          #(swap! IO_FETCHED_COUNTER (fn [_] 0))
+                          #(swap! IO_BATCHED_COUNTER (fn [_] 0))
+                          (fn [] @IO_FETCHED_COUNTER)
+                          (fn [] @IO_BATCHED_COUNTER)))
+
+(def run-muse-monad-experiment (partial run-experiment "muse" monad-runner))
+(def run-muse-app-experiment (partial run-experiment "muse" applicative-runner))
+
+(defn with-if []
+  (let [base-gen-conf {:%ifs 1
+                       :#graphs 7
+                       :#lvls 7
+                       :seed 123456
+                       ;:gen false
+                       }]
+    (run-muse-monad-experiment "if" "monad" (assoc base-gen-conf :lang "MuseMonad"))
+    (run-muse-app-experiment "if" "app" (assoc base-gen-conf :lang "MuseApp"))))
+
+(defn with-func []
+  (let [base-gen-conf {:%ifs 0.3
+                       :#graphs 7
+                       :#lvls 7
+                       :seed 123456
+                       :%funs 0.3}]
+    (run-muse-monad-experiment "func" "monad" (assoc base-gen-conf :lang "Muse"))
+    (run-muse-app-experiment "func" "app" (assoc base-gen-conf :lang "MuseApp"))))
+
+;
+;
+; (deftest experiment-monad
+;   (println "generation result:" (generate-graphs
+;     "--percentageifs" "0"
+;     "-n" "400"
+;     "-o" "com.ohua.fetch/test/clojure/generated/muse_monad.clj"
+;     "-L" "MuseMonad"
+;     "-l" "20"
+;     "-s" "12345"))
+;   (let [results (run-tests (prepare-muse-ns 'generated.muse-monad #'mcompute)
+;                            #(swap! IO_FETCHED_COUNTER (fn [_] 0))
+;                            #(swap! IO_BATCHED_COUNTER (fn [_] 0))
+;                            (fn [] @IO_FETCHED_COUNTER)
+;                            (fn [] @IO_BATCHED_COUNTER))]
+;     (clojure.pprint/print-table results)
+;     (spit "test/muse-monad.json" (to-json results))))
+;
+;
+; (deftest experiment-applicative
+;   (println "generation result:" (generate-graphs
+;     "--percentageifs" "0"
+;     "-n" "400"
+;     "-o" "com.ohua.fetch/test/clojure/generated/muse_applicative.clj"
+;     "-L" "MuseApp"
+;     "-l" "20"
+;     "-s" "12345"))
+;   (let [results (run-tests (prepare-muse-ns 'generated.muse-applicative #'compute)
+;                            #(swap! IO_FETCHED_COUNTER (fn [_] 0))
+;                            #(swap! IO_BATCHED_COUNTER (fn [_] 0))
+;                            (fn [] @IO_FETCHED_COUNTER)
+;                            (fn [] @IO_BATCHED_COUNTER))]
+;     (clojure.pprint/print-table results)
+;     (spit "test/muse-applicative.json" (to-json results))))
 
 
 ;(deftest experiment
