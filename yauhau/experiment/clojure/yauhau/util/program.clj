@@ -120,7 +120,7 @@
   (set! AccumOp/IO_ROUND_COUNTER 0))
 
 
-(defn run-tests [test-fns reset-fetch-count reset-round-count read-fetch-count read-round-count]
+(defn run-tests [test-fns reset-fetch-count reset-round-count reset-read-request-count read-fetch-count read-round-count read-read-request-count]
   (into []
         (doall
           (map (fn [[f-name f]]
@@ -131,12 +131,13 @@
                    (set! Functionality/READ_REQUEST_COUNTER 0)
                    (set! Functionality/WRITE_REQUEST_COUNTER 0)
                    (reset-round-count)
+                   (reset-read-request-count )
                    ; execute the function
                    (f)
                    ; collect the number of I/O calls
                    {"fetches_made"     (read-fetch-count)
                     "rounds_performed" (read-round-count)
                     "levels"           (Integer. levels)
-                    "read_requests"    (Functionality/READ_REQUEST_COUNTER)
+                    "read_requests"    (read-read-request-count)
                     "write_requests"   (Functionality/WRITE_REQUEST_COUNTER)}))
                test-fns))))

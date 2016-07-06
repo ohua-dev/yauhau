@@ -13,6 +13,7 @@
     [yauhau.util.program :refer [generate-graphs run-tests to-json]]))
 
 (def IO_FETCHED_COUNTER (atom 0))
+(def IO_READ_REQUEST_COUNTER (atom 0))
 (def IO_BATCHED_COUNTER (atom 0))
 
 (defrecord GetData [id]
@@ -45,6 +46,7 @@
 
 (defn get-data [& args]
   ;(println "get-data called:" args)
+  (swap! IO_READ_REQUEST_COUNTER inc)
   (GetData. 100))
 
 (defn mcompute [& args]
@@ -89,8 +91,10 @@
   (let [results (run-tests (prepare-muse-ns 'generated.muse-monad #'mcompute)
                            #(swap! IO_FETCHED_COUNTER (fn [_] 0))
                            #(swap! IO_BATCHED_COUNTER (fn [_] 0))
+                           #(swap! IO_READ_REQUEST_COUNTER (fn [_] 0))
                            (fn [] @IO_FETCHED_COUNTER)
-                           (fn [] @IO_BATCHED_COUNTER))]
+                           (fn [] @IO_BATCHED_COUNTER)
+                           (fn [] @IO_READ_REQUEST_COUNTER))]
     (clojure.pprint/print-table results)
     (spit "test/muse-monad.json" (to-json results))))
 
@@ -106,8 +110,10 @@
   (let [results (run-tests (prepare-muse-ns 'generated.muse-applicative #'compute)
                            #(swap! IO_FETCHED_COUNTER (fn [_] 0))
                            #(swap! IO_BATCHED_COUNTER (fn [_] 0))
+                           #(swap! IO_READ_REQUEST_COUNTER (fn [_] 0))
                            (fn [] @IO_FETCHED_COUNTER)
-                           (fn [] @IO_BATCHED_COUNTER))]
+                           (fn [] @IO_BATCHED_COUNTER)
+                           (fn [] @IO_READ_REQUEST_COUNTER))]
     (clojure.pprint/print-table results)
     (spit "test/muse-applicative.json" (to-json results))))
 

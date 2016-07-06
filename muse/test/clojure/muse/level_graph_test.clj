@@ -1,3 +1,4 @@
+(println *clojure-version*)
 (ns muse.level-graph-test
   (:require
     [clojure.test :refer (deftest is)]
@@ -150,23 +151,32 @@
     ))
 
 (defn fun-1 []
-  (run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
+  ;(run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
     (m/mlet [[local-10 local-11] (<$> clojure.core/vector (get-data "foo1" 100) (get-data "foo2" 200))
              ;_ (<$> println "output:" local-10) ; not executed at all :(
              ;_ (println "output:" local-10) ; not executed at all :(
              ]
             (println "output:" local-10)
-            (get-data "inner-foo" local-11))) ; apparently also not called. but GetData records returned.
+            (get-data "inner-foo" local-11)) ; apparently also not called. but GetData records returned.
+   ; )
   )
 
 (defn fun-2 []
-  (run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
+  ;(run!! ; -> the whole thing does not work without it! hence, Muse has no chance of batching in between functions
     (m/mlet [[local-10 local-11] (<$> clojure.core/vector (get-data "foo3" 300) (get-data "foo4" 400))]
-            (m/return (compute- local-10 local-11)))) ; apparently also not called. but GetData records returned.
+            (m/return (compute- local-10 local-11))) ; apparently also not called. but GetData records returned.
+   ; )
   )
 
 
-(deftest experiment-nested-runs
+(deftest experiment-nested-runs-monad
   (println
     (run!!
-      (get-data "outer-foo" (fun-1 ) (fun-2)))))
+      (m/mlet [f1 (fun-1 )
+               f2 (fun-2 )]
+        (get-data "outer-foo" f1 f2)))))
+
+(deftest experiment-nested-runs-app
+  (println
+    (run!!
+        (flat-map (partial get-data "outer-foo") (flat-map fun-1 (compute )) (fun-2 )))))

@@ -1,6 +1,8 @@
+(println *clojure-version*)
 (ns yauhau.one-to-n-bug
   (:require [com.ohua.lang :refer [ohua defalgo]]
             [yauhau.ir-transform]
+            [com.ohua.logging :as l]
             [clojure.test :refer [deftest]]))
 
 (ohua :import [yauhau.functions])
@@ -37,9 +39,11 @@
     (get-data local3 "service-name" 4)))
 
 (defn run_test_level1_0 []
+  (l/enable-compilation-logging )
   (ohua
     (smap ifnlocal1 (yauhau.functions/vector))
-    :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
+    ;:compile-with-config {:df-transformations yauhau.ir-transform/transformations}
+    ))
 
 
 (deftest one-to-n-bug-test
