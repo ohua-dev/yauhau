@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns yauhau.test-program
+(ns yauhau.yauhau-experiment
   (:require [com.ohua.lang :as o]
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
@@ -141,7 +141,7 @@
 ;     (spit "test/yauhau-applicative.jso\n" (to-json results))))
 
 
-(deftest experiment-yauhau-with-if
+(defn with-if []
   (let [base-gen-conf {:%ifs 1
                        :#graphs 7
                        :#lvls 7
@@ -149,7 +149,7 @@
 
     (doall (map (fn [style lang] (run-yauhau-experiment "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
 
-(deftest experiment-yauhau-with-func
+(defn with-func []
   (let [base-gen-conf {:%ifs 0.3
                        :#graphs 7
                        :#lvls 7
