@@ -20,6 +20,7 @@
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
 
+
 (defn trace [thing]
   (println thing)
   thing)
@@ -156,7 +157,7 @@
                        :seed 123456
                        :%funs 0.3}]
 
-    (doall (map (fn [style lang] (run-yauhau-experiment "func" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
+    (doall (map (fn [style lang] (run-yauhau-experiment "func" style (assoc base-gen-conf :lang lang))) ["monad"] ["Ohua"]))))
 
 ;(deftest experiment-if
 ;  (generate-graphs

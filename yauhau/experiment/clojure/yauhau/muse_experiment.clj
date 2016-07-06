@@ -76,7 +76,7 @@
         ;_ (println "test-program?" *ns*)
 
         fns (ns-publics name)]
-    (filter (fn [[f-name _]] (not (some #{f-name} '(get-data compute)))) fns)))
+    (filter (fn [[f-name _]] (re-find #"run\_test\_level\d+(\_\d+)?" (str f-name))) fns)))
 
 
 (defn monad-runner [namespace]
@@ -114,7 +114,7 @@
                        :#lvls 7
                        :seed 123456
                        :%funs 0.3}]
-    (run-muse-monad-experiment "func" "monad" (assoc base-gen-conf :lang "Muse"))
+    (run-muse-monad-experiment "func" "monad" (assoc base-gen-conf :lang "MuseMonad"))
     (run-muse-app-experiment "func" "app" (assoc base-gen-conf :lang "MuseApp"))))
 
 ;
