@@ -18,10 +18,7 @@
             [clojure.java.io :refer [file make-parents delete-file]]
             [clojure.string :as string])
   (:use yauhau.util.program)
-  (:import (yauhau.functions Functionality AccumOp)
-           (com.ohua.lang.compile FlowGraphCompiler)))
-
-(set! FlowGraphCompiler/SKIP_FUNCTION_SAFETY_ANALYSIS false)
+  (:import (yauhau.functions Functionality AccumOp)))
 
 (defn trace [thing]
   (println thing)
