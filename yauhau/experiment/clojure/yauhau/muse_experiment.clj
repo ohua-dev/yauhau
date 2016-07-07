@@ -10,7 +10,8 @@
     [promesa.core :as prom]
     [muse.core :as muse :refer :all]
     [cats.core :as m]
-    [yauhau.util.program :refer [generate-graphs run-tests to-json run-experiment]]))
+    [clojure.java.io :refer [file make-parents delete-file]]
+    [yauhau.util.program :refer [generate-graphs run-tests to-json run-experiment run-one-test]]))
 
 (def IO_FETCHED_COUNTER (atom 0))
 (def IO_BATCHED_COUNTER (atom 0))
@@ -98,6 +99,48 @@
 (def run-muse-monad-experiment (partial run-experiment "muse" monad-runner))
 (def run-muse-app-experiment (partial run-experiment "muse" applicative-runner))
 
+(def counter (atom 0))
+
+(defn run-func-exp [system runner exp-type codestyle lang]
+  (let [basefolder (str "yauhau/experiment/clojure/generated/" system "/" exp-type "/" codestyle "/")
+        basenamespace (str "generated." system "." exp-type "." codestyle)
+        _ (do
+            (println "cleaning...")
+            (make-parents (str basefolder "abc")))
+        results
+        (apply concat
+          (for [seed [123456 234567]
+                percentage [0.1 0.2 0.3 0.4]]
+            (do
+              (doseq [f (.listFiles (file basefolder))]
+                (delete-file f))
+              (println "generating" seed percentage)
+              (generate-graphs
+                "-n" "1"
+                "-l" "20"
+                "-L" (str lang)
+                "--percentagefuns" (str percentage)
+                "-s" (str seed)
+                "-o" (str basefolder))
+              (println "finished generating")
+              (doseq [f (.listFiles (file basefolder))]
+                (println (str f)))
+              (println "Starting experiments")
+              (doall
+                (mapcat
+                  (fn [f]
+                    (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
+                      (let [c (swap! counter inc)
+                            n (str (second m) c)
+                            f2 (file (str basefolder "/" n ".clj") )]
+                        (println f2)
+                        (.renameTo f f2)
+                        (doall
+                          (map (fn [res] (assoc res "if_percentage" percentage)) (run-one-test runner basenamespace n))))))
+                  (seq (.listFiles (file basefolder))))))))]
+    (clojure.pprint/print-table results)
+    (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results))))
+
 (defn with-if []
   (let [base-gen-conf {:%ifs 1
                        :#graphs 7
@@ -114,8 +157,8 @@
                        :#lvls 7
                        :seed 123456
                        :%funs 0.3}]
-    (run-muse-monad-experiment "func" "monad" (assoc base-gen-conf :lang "MuseMonad"))
-    (run-muse-app-experiment "func" "app" (assoc base-gen-conf :lang "MuseApp"))))
+    (run-func-exp "muse" monad-runner "func" "monad" "MuseMonad")
+    (run-func-exp "muse" applicative-runner "func" "app" "MuseApp")))
 
 ;
 ;
