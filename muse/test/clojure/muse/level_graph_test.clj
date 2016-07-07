@@ -96,6 +96,14 @@
                       local-2 (if (compute 22) (get-data "foo3" 24) (get-data "foo4" 23))]
                      (compute local-1 local-2 100)))))
 
+(deftest experiment-batching-conditions-locals
+  (println "result:"
+           (run!!
+             (m/mlet [local-1 (get-data "foo5" 20)
+                      local-2 (get-data "foo4" 20)
+                      local-3 (if (compute 22) (value local-1) (value local-2))]
+                     (compute local-3 100)))))
+
 (deftest experiment-applicative
   (println "result:"
            (run!!
