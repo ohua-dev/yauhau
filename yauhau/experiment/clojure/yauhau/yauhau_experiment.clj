@@ -150,6 +150,49 @@
 
     (doall (map (fn [style lang] (run-yauhau-experiment "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
 
+(def counter (atom 0))
+
+(defn run-func-exp [system runner exp-type codestyle lang]
+  (let [basefolder (str "yauhau/experiment/clojure/generated/" system "/" exp-type "/" codestyle "/")
+        basenamespace (str "generated." system "." exp-type "." codestyle)
+        _ (do
+            (println "cleaning...")
+            (make-parents (str basefolder "abc")))
+        results
+        (apply concat
+          (for [seed [123456 234567]
+                percentage [0.1 0.2 0.3 0.4]]
+            (do
+              (doseq [f (.listFiles (file basefolder))]
+                (delete-file f))
+              (println "generating" seed percentage)
+              (generate-graphs
+                "-n" "1"
+                "-l" "20"
+                "-L" (str lang)
+                "--percentagefuns" (str percentage)
+                "-s" (str seed)
+                "-o" (str basefolder))
+              (println "finished generating")
+              (doseq [f (.listFiles (file basefolder))]
+                (println (str f)))
+              (println "Starting experiments")
+              (doall
+                (mapcat
+                  (fn [f]
+                    (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
+                      (let [c (swap! counter inc)
+                            n (str (second m) c)
+                            f2 (file (str basefolder "/" n ".clj") )]
+                        (println f2)
+                        (.renameTo f f2)
+                        (doall
+                          (map (fn [res] (assoc res "if_percentage" percentage)) (run-one-test runner basenamespace n))))))
+                  (seq (.listFiles (file basefolder))))))))]
+    (clojure.pprint/print-table results)
+    (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results))))
+
+
 (defn with-func []
   (let [base-gen-conf {:%ifs 0.3
                        :#graphs 7
@@ -157,7 +200,7 @@
                        :seed 123456
                        :%funs 0.3}]
 
-    (doall (map (fn [style lang] (run-yauhau-experiment "func" style (assoc base-gen-conf :lang lang))) ["monad"] ["Ohua"]))))
+    (doall (map (fn [style lang] (run-func-exp "yauhau" runner "func" style lang)) ["monad"] ["Ohua"]))))
 
 ;(deftest experiment-if
 ;  (generate-graphs
