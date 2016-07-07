@@ -55,8 +55,16 @@ public class AccumOp {
 
     public static class AccumulateAndFetch extends Accumulation {
         @defsfn
-        public Object[] __accumFetch(@ReadOnly RequestTree... requests) {
+        public Object[] __accumFetch(@ReadOnly RequestTree... requests) throws Throwable {
+
+            for (int i=0; i < requests.length; i++)
+                if (requests[i] == null) throw new Exception("Request tree " + i + " of " + requests.length + " is null.");
+
             Request[] rqarr = Arrays.stream(requests).flatMap(RequestTree::getRequestsStream).toArray(Request[]::new);
+
+            for (int i=0; i < rqarr.length; i++)
+                if (rqarr[i] == null) throw new Exception("Request " + i + " is null.");
+
             Map<Object, Set<Request>> mappedRequests = super.__accum(rqarr).stream().collect(
                     Collectors.toMap(
                             Tuple::get1,

@@ -16,15 +16,17 @@
             [clojure.repl :refer [source]]
             [com.ohua.logging :as l]
             [clojure.java.shell :refer [sh]]
-            [cheshire.core :as ch])
+            [cheshire.core :as ch]
+            [clojure.string :as string]
+            [clojure.java.io :refer [make-parents file delete-file]])
   (:import
     ;(com.ohua.fetch IDataSource)
     ;       (java.util Arrays)
     (yauhau.functions Functionality AccumOp)
-    (com.ohua.lang.compile FlowGraphCompiler)))
+    (com.ohua.lang.compile FlowGraphCompiler)
+    (com.ohua.engine.utils GraphVisualizer)))
 
 (def code-gen-executable "../rand-code-graph/.stack-work/install/x86_64-osx/lts-6.4/7.10.3/bin/random-level-graphs")
-
 
 (defmacro get-data [& args]
   (if (and (< (count args) 3)
@@ -120,7 +122,7 @@
   (set! AccumOp/IO_ROUND_COUNTER 0))
 
 
-(defn run-tests [test-fns reset-fetch-count reset-round-count reset-read-request-count read-fetch-count read-round-count read-read-request-count]
+(defn run-tests [test-fns reset-fetch-count reset-round-count read-fetch-count read-round-count]
   (into []
         (doall
           (map (fn [[f-name f]]
@@ -131,13 +133,69 @@
                    (set! Functionality/READ_REQUEST_COUNTER 0)
                    (set! Functionality/WRITE_REQUEST_COUNTER 0)
                    (reset-round-count)
-                   (reset-read-request-count )
                    ; execute the function
                    (f)
                    ; collect the number of I/O calls
                    {"fetches_made"     (read-fetch-count)
                     "rounds_performed" (read-round-count)
                     "levels"           (Integer. levels)
-                    "read_requests"    (read-read-request-count)
+                    "read_requests"    (Functionality/READ_REQUEST_COUNTER)
                     "write_requests"   (Functionality/WRITE_REQUEST_COUNTER)}))
                test-fns))))
+
+
+ (defn run-one-test [runner basenamespace filename]
+   (let [namespace (symbol (str
+                             basenamespace
+                             "."
+                             (string/replace
+                               filename
+                               #"\_"
+                               "-")))
+         _ (println "Running test for" namespace)
+         results
+         (runner namespace)]
+     (remove-ns namespace)
+     results))
+
+
+ (defn get-opt [m key flag]
+   (if-let [v (m key)]
+     [flag (str v)]))
+
+
+(defn run-experiment [system runner exp-type codestyle gen-conf]
+  (let [basefolder (str "yauhau/experiment/clojure/generated/" system "/" exp-type "/" codestyle "/")
+        basenamespace (str "generated." system "." exp-type "." codestyle)
+        g (partial get-opt gen-conf)]
+   (if (or (not (contains? gen-conf :gen)) (= true (:gen gen-conf)))
+     (do
+       (println "cleaning...")
+       (make-parents (str basefolder "abc"))
+       (doseq [f (.listFiles (file basefolder))]
+         (delete-file f))
+       (println "generating...")
+       (apply
+         generate-graphs
+         (concat
+           (g :%ifs "--percentageifs")
+           (g :#graphs "-n")
+           (g :lang "-L")
+           (g :#lvls "-l")
+           (g :seed "-s")
+           (g :%maps "--percentagemaps")
+           (g :%funs "--percentagefuns")
+           (g :%sources "--percentagesources")
+           (if (contains? gen-conf :+slow) "--slowdatasource")
+            ["-o" (str basefolder)]))
+       (println "finished generating")))
+   (println "Starting experiments")
+   (let [results
+         (into []
+           (mapcat
+             (fn [f]
+               (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
+                 (run-one-test runner basenamespace (second m))))
+             (seq (.listFiles (file basefolder)))))]
+     (clojure.pprint/print-table results)
+     (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results)))))

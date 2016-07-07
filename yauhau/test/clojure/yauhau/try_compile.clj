@@ -14,7 +14,7 @@
 (defmacro compile [& args]
   `(<-ohua
     ~@args
-    :compile-with-config {:df-transformations [~@yauhau.ir-transform/transformations]}))
+    :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
 
 ;(defn mk-req [data source]

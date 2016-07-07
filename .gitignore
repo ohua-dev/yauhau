@@ -16,3 +16,6 @@ pom.xml.asc
 *.iml
 /.idea/
 /yauhau/test/clojure/generated/
+/yauhau/experiment/clojure/generated/
+/test/
+/ir-graphs/

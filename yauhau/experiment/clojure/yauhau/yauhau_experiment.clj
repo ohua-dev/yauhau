@@ -4,7 +4,7 @@
 ; This source code is licensed under the terms described in the associated LICENSE file.
 ;
 
-(ns yauhau.test-program
+(ns yauhau.yauhau-experiment
   (:require [com.ohua.lang :as o]
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
@@ -20,11 +20,12 @@
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
 
+
 (defn trace [thing]
   (println thing)
   thing)
 
-(enable-compilation-logging)
+; (enable-compilation-logging)
 
 ;(defprotocol IGenericPayload
 ;  (equals [other-payload]))
@@ -77,32 +78,14 @@
 
 
 (defmacro ohua [& args]
-  `(o/ohua
+  `(o/<-ohua
      ~@args
-     :compile-with-config {:df-transformations [
-                                                ; batch rewrite
-                                                ~@yauhau.ir-transform/transformations
-
-                                                ; concurrent batch I/O rewrite
-                                                ; conc-io/rewrite
-
-                                                ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
-                                                ]}))
+     :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
 (defmacro ohua-conc [& args]
-  `(o/ohua
+  `(o/<-ohua
      ~@args
-     :compile-with-config {:df-transformations [
-                                                ; batch rewrite
-                                                ~@yauhau.ir-transform/transformations
-
-                                                ; concurrent batch I/O rewrite
-                                                ; conc-io/rewrite
-
-                                                ; cache rewrite
-                                                ;(partial cache/cache-rewrite "com.ohua.fetch.functions/round-persistent-cache-manager")
-                                                ]}
+     :compile-with-config {:df-transformations yauhau.ir-transform/transformations}
      :run-with-config (doto (new com.ohua.engine.RuntimeProcessConfiguration)
                         (.setProperties (doto (new java.util.Properties)
                                           (.setProperty "execution-mode"
@@ -113,115 +96,68 @@
      ))
 
 
-(deftest experiment-monad
-  (generate-graphs
-    "--percentageifs" "0"
-    "-n" "400"
-    "-o" "com.ohua.fetch/test/clojure/generated/yauhau_monad.clj"
-    "-L" "Ohua"
-    "-l" "20"
-    "-s" "12345")
-  (let [results (run-tests (prepare-ns 'generated.yauhau-monad #'ohua)
-                           #(set! Functionality/IO_FETCH_COUNTER 0)
-                           #(set! AccumOp/IO_ROUND_COUNTER 0)
-                           #(Functionality/IO_FETCH_COUNTER)
-                           #(AccumOp/IO_ROUND_COUNTER))]
-    (clojure.pprint/print-table results)
-    (spit "test/yauhau-monad.json" (to-json results))))
+
+ (defn runner [namespace]
+   (run-tests (prepare-ns namespace #'ohua)
+              #(set! Functionality/IO_FETCH_COUNTER 0)
+              #(set! AccumOp/IO_ROUND_COUNTER 0)
+              #(Functionality/IO_FETCH_COUNTER)
+              #(AccumOp/IO_ROUND_COUNTER)))
 
 
-(deftest experiment-applicative
-  (generate-graphs
-    "--percentageifs" "0"
-    "-n" "400"
-    "-o" "com.ohua.fetch/test/clojure/generated/yauhau_applicative.clj"
-    "-L" "Ohua"
-    "-l" "20"
-    "-s" "12345")
-  (let [results (run-tests (prepare-ns 'generated.yauhau-applicative #'ohua)
-                           #(set! Functionality/IO_FETCH_COUNTER 0)
-                           #(set! AccumOp/IO_ROUND_COUNTER 0)
-                           #(Functionality/IO_FETCH_COUNTER)
-                           #(AccumOp/IO_ROUND_COUNTER))]
-    (clojure.pprint/print-table results)
-    (spit "test/yauhau-applicative.json" (to-json results))))
+(def run-yauhau-experiment (partial run-experiment "yauhau" runner))
 
 
-(defn run-one-if-test [basenamespace filename]
-  (let [namespace (symbol (str
-                            basenamespace
-                            "."
-                            (string/replace
-                              filename
-                              #"\_"
-                              "-")))
-        _ (println "Running test for" namespace)
-        results
-        (run-tests (prepare-ns namespace #'ohua)
-                   #(set! Functionality/IO_FETCH_COUNTER 0)
-                   #(set! AccumOp/IO_ROUND_COUNTER 0)
-                   #(Functionality/IO_FETCH_COUNTER)
-                   #(AccumOp/IO_ROUND_COUNTER))]
-    (remove-ns namespace)
-    results))
+; (deftest experiment-monad
+;   (generate-graphs
+;     "--percentageifs" "0"
+;     "-n" "400"
+;     "-o" "com.ohua.fetch/test/clojure/generated/yauhau_monad.clj"
+;     "-L" "Ohua"
+;     "-l" "20"
+;     "-s" "12345")
+;   (let [results (run-tests (prepare-ns 'generated.yauhau-monad #'ohua)
+;                            #(set! Functionality/IO_FETCH_COUNTER 0)
+;                            #(set! AccumOp/IO_ROUND_COUNTER 0)
+;                            #(Functionality/IO_FETCH_COUNTER)
+;                            #(AccumOp/IO_ROUND_COUNTER))]
+;     (clojure.pprint/print-table results)
+;     (spit "test/yauhau-monad.json" (to-json results))))
+;
+;
+; (deftest experiment-applicative
+;   (generate-graphs
+;     "--percentageifs" "0"
+;     "-n" "400"
+;     "-o" "com.ohua.fetch/test/clojure/generated/yauhau_applicative.clj"
+;     "-L" "Ohua"
+;     "-l" "20"
+;     "-s" "12345")
+;   (let [results (run-tests (prepare-ns 'generated.yauhau-applicative #'ohua)
+;                            #(set! Functionality/IO_FETCH_COUNTER 0)
+;                            #(set! AccumOp/IO_ROUND_COUNTER 0)
+;                            #(Functionality/IO_FETCH_COUNTER)
+;                            #(AccumOp/IO_ROUND_COUNTER))]
+;     (clojure.pprint/print-table results)
+;     (spit "test/yauhau-applicative.jso\n" (to-json results))))
 
 
-(defn get-opt [m key flag]
-  (if-let [v (m key)]
-    [flag (str v)]))
-
-
-(defn experiment-yauhau [exp-type codestyle gen-conf]
-  (let [basefolder (str "yauhau/experiment/clojure/generated/yauhau/" exp-type "/" codestyle "/")
-        basenamespace (str "generated.yauhau." exp-type "." codestyle)
-        g (partial get-opt gen-conf)]
-    (println "cleaning...")
-    (make-parents (str basefolder "abc"))
-    (doseq [f (.listFiles (file basefolder))]
-      (delete-file f))
-    (println "generating...")
-    (apply
-      generate-graphs
-      (concat
-        (g :%ifs "--percentageifs")
-        (g :#graphs "-n")
-        (g :lang "-L")
-        (g :#lvls "-l")
-        (g :seed "-s")
-        (g :%maps "--percentagemaps")
-        (g :%funs "--percentagefuns")
-        (g :%sources "--percentagesources")
-        (if (contains? gen-conf :+slow) "--slodatasource")
-        ["-o" (str basefolder)]))
-    (println "finished generating")
-    (let [results
-          (into []
-            (mapcat
-              (fn [f]
-                (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
-                  (run-one-if-test basenamespace (second m))))
-              (seq (trace (.listFiles (file basefolder))))))]
-      (clojure.pprint/print-table results)
-      (spit (str "test/yauhau-" exp-type "-" codestyle ".json") (to-json results)))))
-
-
-(deftest experiment-yauhau-with-if
+(defn with-if []
   (let [base-gen-conf {:%ifs 1
                        :#graphs 7
                        :#lvls 7
                        :seed 123456}]
 
-    (doall (map (fn [style lang] (experiment-yauhau "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
+    (doall (map (fn [style lang] (run-yauhau-experiment "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
 
-(deftest experiment-yauhau-with-func
+(defn with-func []
   (let [base-gen-conf {:%ifs 0.3
                        :#graphs 7
                        :#lvls 7
                        :seed 123456
-                       :%maps 0.3
                        :%funs 0.3}]
 
-    (doall (map (fn [style lang] (experiment-yauhau "func" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
+    (doall (map (fn [style lang] (run-yauhau-experiment "func" style (assoc base-gen-conf :lang lang))) ["monad"] ["Ohua"]))))
 
 ;(deftest experiment-if
 ;  (generate-graphs

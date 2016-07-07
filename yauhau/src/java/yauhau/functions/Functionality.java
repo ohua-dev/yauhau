@@ -183,7 +183,7 @@ public class Functionality {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            IO_FETCH_COUNTER++;
+            IO_FETCH_COUNTER+=result.size();
             return result;
         }
 
