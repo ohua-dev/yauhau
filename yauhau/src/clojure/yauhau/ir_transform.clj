@@ -312,6 +312,16 @@
                        (fn [[req-in fetch-in fetch-out]]
                          (lift-m*
                            vector
+                           ; TODO these empties can share one request
+                           ; There is no reason why there should be one distinct request
+                           ; for each fetch. They can share the same since the result is discarded anyways
+                           ; This would also solve the issue of additional forced rounds.
+                           ; Issue of additional forced rounds:
+                           ;    If all inserted empty fetches depend on one another
+                           ;    each of them has to be in a different round.
+                           ;    however the other branch may have parallel fetches
+                           ;    which could be in the same round but the dependant empties
+                           ;    force distict rounds after they've been merged.  
                            (state-mk-empty-req [req-in] fetch-in)
                            (state-mk-fetch [fetch-in] fetch-out)))
                        (map conj names outs)))
@@ -336,18 +346,33 @@
         graph))))
 
 
+; FIXME
+; This algorithm assumes that fetches-concerned is a sequence of fetches
+; in order as they would be called in the program.
+; If we were to impose this condition on fetches-concerned the function get-fetches-concerned
+; would have to be altered. Currently get-fetches-concerned returns the fetches in call order
+; because the IR contains them in call order. However this property is not strongly enforced
+; because the translation from IR to Operators can be done on an IR which is not in call order.
+; There is even a known point where this property breaks, which is when the accumulatir is inserted.
+; Currently every accumulator is inserted at the top of the IR *every time* breaking call order.
+; Regardles of whether the fetches-concerned have correct order or not though
+; independant fetches in branches are not correcly handled.
+; They should be merged rather than linearized.
 (defn- mapped-fetches-for-if
   ([curr-if] (>>= (get-fetches-concerned curr-if) (partial mapped-fetches-for-if curr-if)))
   ([curr-if fetches-concerned]
    (mdo
+     let out-ports = (.-return (.-function curr-if))
      label-map <- get-label-map
      let _ = (l/printline "Fetches concerned:" fetches-concerned)
      _ = (assert-type LabeledFunction curr-if "Current if has incorrect type")
      (return (merge
                (zipmap (ir/get-return-vars (.-function curr-if)) (repeat []))
                (group-by (fn [fun]
-                           (let [label (peek (label-map (canonicalize-label-key fun)))]
-                             ((.-return (.-function curr-if)) (:out-var label))))
+                           (let [{index :out-var} (peek ; FIXME this is not correct anymore, the topmost stack value could be algo-out as well
+                                                        ; I am honestly surprised this even works
+                                                    (label-map (canonicalize-label-key fun)))]
+                             (out-ports index)))
                          fetches-concerned))))))
 
 
@@ -361,7 +386,9 @@
     _ = (l/printline "Fetch seq is" longest-fetch-seq)
     example-if-stack <- (state-get-label (assert-not-nil (first longest-fetch-seq) "330"))
     shortened-if-stack <- (state-get-label if-op)
-    let last-stack-entry = (last example-if-stack)
+    let last-stack-entry = (last example-if-stack) ; FIXME again, wrong.
+                                                   ; The topmost stack entry could be anything.
+                                                   ; We're looking for the topmost *if-stack* entry
     empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
 
     empties-replacement-map <-
@@ -691,8 +718,6 @@
      (l/log-graph graph)
      g)
   gen-ids
-   ; TODO change to tree builders
-   ;insert-leaf-builders
   context-rewrite
   (validate-and-log "context-rewrite")
   batch-rewrite
