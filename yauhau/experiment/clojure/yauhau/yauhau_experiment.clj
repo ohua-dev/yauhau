@@ -19,7 +19,7 @@
             [clojure.string :as string])
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
-
+(set! (. com.ohua.engine.utils.GraphVisualizer PRINT_FLOW_GRAPH) (str "test/level-graph-flow"))
 
 (defn trace [thing]
   (println thing)
@@ -149,6 +149,14 @@
                        :seed 123456}]
 
     (doall (map (fn [style lang] (run-yauhau-experiment "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
+
+(defn with-map []
+  (let [gen-conf {:%maps 0.6
+                  :#graphs 6
+                  :#lvls 7
+                  :seed 123456
+                  :lang "Ohua"}]
+    (run-yauhau-experiment "map" "monad" gen-conf)))
 
 (def counter (atom 0))
 

@@ -66,6 +66,7 @@
 
 
 (defmulti fn-to-id type)
+(defmethod fn-to-id LabeledFunction [f] (.-id (.-functions f)))
 (defmethod fn-to-id IRFunc [f] (.-id f))
 (defmethod fn-to-id Long [id] id)
 
@@ -77,15 +78,25 @@
       (recur name-gen))))
 
 
-(defn mk-name-gen-func [ir-graph] (partial next-var-name (atom (ir/name-gen-from-graph ir-graph))))
+(defn mk-name-gen-func
+  "Create a function which every time it is called returns a new name unique in
+  ir-graph"
+  [ir-graph] (partial next-var-name (atom (ir/name-gen-from-graph ir-graph))))
 
 
-(defn mapM [comp & seqs] (sequence-m (apply map comp seqs)))
+(defn mapM
+  "Map a computation onto seqs and then monad thread the results in order (sequence-m)"
+  [comp & seqs] (sequence-m (apply map comp seqs)))
 
-(defn dissoc-many [map keys] (persistent! (reduce dissoc! (transient map) keys)))
+(defn dissoc-many
+  "(Efficiently) remove all values placed at provided keys in the map provided"
+  [map keys] (persistent! (reduce dissoc! (transient map) keys)))
 
 
-(defn reindex-preserving [target thing]
+(defn reindex-preserving
+  "Reindex some meta value of each in collection 'thing' preserving previous
+  values"
+  [target thing]
   (first
     (st/run-state
       (mapM
@@ -101,7 +112,10 @@
                 (return item)))))
         thing)
       0)))
-(defn mk-func-and-index [id name args return]
+(defn mk-func-and-index
+  "Create an IR function with given parameters and also index the arguments and
+  returns"
+  [id name args return]
   (ir/->IRFunc id name
                (into [] (ir/reindex-stuff :in-idx args))
                (if (seq? return)
@@ -110,6 +124,8 @@
 
 
 (defn distinct-by
+  "Select all elements of coll for which the provided function returns a
+  distinct value"
   [f coll]
    (let [step (fn step [xs seen]
                 (lazy-seq
@@ -126,7 +142,9 @@
 (def get-name-gen (fmap :name-gen get-state))
 (def state-mk-name (fmap (fn [a] (a)) get-name-gen))
 (def get-label-map (fmap :label-map get-state))
-(defn state-put-label [key label]
+(defn state-put-label
+  "Place label at key in the label map saved in a composite underlying state"
+  [key label]
   (modify #(assoc-in % [:label-map (canonicalize-label-key key)] label)))
 (defn unsafe-modify-graph
   "this is unsafe because it only modifies the graph and not the label map"
@@ -189,7 +207,21 @@
                (unsafe-modify-graph (partial ir/update-graph {old (map first new)}))
                (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
-(defn get-largest-id [ir-graph] (apply max (remove nil? (map :id ir-graph))))
+
+(defn- topmost-if-frame [label-map if-fn target]
+  (let [if-id (fn-to-id if-fn)
+        stack (label-map (fn-to-id target))
+        {op-id :op-id :as top} (last (filter (fn [{t :type}] (= 'if t)) stack))]
+    (if (not (= if-id op-id))
+      (throw (RuntimeException. "Topmost if stackframe pointed to unexpected operator"))
+      top)))
+(defn- state-topmost-if-frame [if-fn target]
+  (fmap (fn [map] (topmost-if-frame map if-fn target)) get-label-map))
+
+
+(defn get-largest-id
+  "Obtain the largest ID present in the given ir-graph"
+  [ir-graph] (apply max (remove nil? (map :id ir-graph))))
 
 (defn find-next-fetches
   "docstring"
@@ -287,6 +319,8 @@
                        graph
                        (into [] graph)))
         (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
+              ; TODO we might have to insert identity operators after the outputs too
+              ; since the fetch operator might have destructured return
               outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
               accum (mk-func-and-index new-id 'yauhau.functions/__accum-fetch inputs outputs)
               fetches-removed (remove (set fetch-nodes) graph)
@@ -321,7 +355,7 @@
                            ;    each of them has to be in a different round.
                            ;    however the other branch may have parallel fetches
                            ;    which could be in the same round but the dependant empties
-                           ;    force distict rounds after they've been merged.  
+                           ;    force distict rounds after they've been merged.
                            (state-mk-empty-req [req-in] fetch-in)
                            (state-mk-fetch [fetch-in] fetch-out)))
                        (map conj names outs)))
@@ -369,9 +403,10 @@
      (return (merge
                (zipmap (ir/get-return-vars (.-function curr-if)) (repeat []))
                (group-by (fn [fun]
-                           (let [{index :out-var} (peek ; FIXME this is not correct anymore, the topmost stack value could be algo-out as well
-                                                        ; I am honestly surprised this even works
-                                                    (label-map (canonicalize-label-key fun)))]
+                           ; TODO general reminder to find all places that assume
+                           ; the currently handeled stack frame is the top frame for
+                           ; all functions and replace them with the correct handling
+                           (let [{index :out-var} (topmost-if-frame label-map curr-if fun)]
                              (out-ports index)))
                          fetches-concerned))))))
 
@@ -384,12 +419,9 @@
     let longest-fetch-seq = (apply max-key count (vals mapped-to-port))
     longest-nr = (count longest-fetch-seq)
     _ = (l/printline "Fetch seq is" longest-fetch-seq)
-    example-if-stack <- (state-get-label (assert-not-nil (first longest-fetch-seq) "330"))
     shortened-if-stack <- (state-get-label if-op)
-    let last-stack-entry = (last example-if-stack) ; FIXME again, wrong.
-                                                   ; The topmost stack entry could be anything.
-                                                   ; We're looking for the topmost *if-stack* entry
-    empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
+    last-stack-entry <- (state-topmost-if-frame if-op (first longest-fetch-seq))
+    let empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
 
     empties-replacement-map <-
     (fmap persistent!
@@ -431,7 +463,8 @@
 
 
 (def ^:private state-get-if-handled-fns (fmap (comp :handled-functions :if-rewrite-private-state) get-state))
-(defn- state-add-if-handled-fns [fns] (modify (fn [state] (update-in state [:if-rewrite-private-state :handled-functions] (partial setlib/union (set (map fn-to-id fns)))))))
+(defn- state-add-if-handled-fns [fns]
+  (modify (fn [state] (update-in state [:if-rewrite-private-state :handled-functions] (partial setlib/union (set (map fn-to-id fns)))))))
 (def ^:private state-init-if-handled-fns
   (fmap
     (fn [state]

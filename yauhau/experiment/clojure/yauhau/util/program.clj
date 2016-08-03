@@ -26,7 +26,7 @@
     (com.ohua.lang.compile FlowGraphCompiler)
     (com.ohua.engine.utils GraphVisualizer)))
 
-(def code-gen-executable "../rand-code-graph/.stack-work/install/x86_64-osx/lts-6.4/7.10.3/bin/random-level-graphs")
+(def code-gen-executable "random-level-graphs")
 
 (defmacro get-data [& args]
   (if (and (< (count args) 3)

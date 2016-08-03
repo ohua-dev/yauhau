@@ -29,7 +29,6 @@ public class UtilityOperators {
         @defsfn
         public RequestTreeBranch __mkReqBranch(@ReadOnly Iterable<RequestTree> trees) throws Throwable {
             if (trees == null) throw new Exception("Trees are null");
-            System.out.println("building req tree " + trees + " type " + trees.getClass());
             return new RequestTreeBranch(trees);
         }
     }
