@@ -4,7 +4,7 @@ import com.ohua.lang.defsfn;
 import java.util.Arrays;
 import java.util.ArrayList;
 
-public class Vector {
+public final class Vector {
 
     @defsfn
     public Iterable mvector (Object... args) {

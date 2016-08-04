@@ -266,6 +266,12 @@
                         (assoc :args (reindex-preserving :in-idx (cons new-fetch-in rest-fetch-args)))
                         (assoc :return (vary-meta fetch-out assoc :out-idx -1)))
 
+    ; RFE optimisation
+    ; In theory this operator is not necessary, we could simply reuse the
+    ; output from 'otn', however Ohua currently raises an InvariantBroken
+    ; exception if I do that. Therefore I must discuss with @serel whether
+    ; we can abolish that invariant to reuse some results here.
+    ; This would decrease the operator pressure significantly even for small graphs
     first-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source size-source] one-to-n-out)
     new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out f-fetch-arg] collect-out)
     tree-builder <- (state-mk-func 'yauhau.functions/__mk-req-branch [collect-out] new-fetch-in)
@@ -295,8 +301,6 @@
                                  (filter #(some (partial = frame) (second %)))
                                  (map (comp :id first)))
     _ = (l/printline "Concerned fetches" fetches-concerned)
-    _ = (l/printline "Label map")
-    _ = (pprint label-map)
     (mapM (partial wrap-smap-once frame) fetches-concerned)))
 
 
