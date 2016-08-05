@@ -136,8 +136,8 @@
                    ; execute the function
                    (f)
                    ; collect the number of I/O calls
-                   {"fetches_made"     (read-fetch-count)
-                    "rounds_performed" (read-round-count)
+                   {"fetches"     (read-fetch-count)
+                    "rounds" (read-round-count)
                     "levels"           (Integer. levels)
                     "read_requests"    (Functionality/READ_REQUEST_COUNTER)
                     "write_requests"   (Functionality/WRITE_REQUEST_COUNTER)}))
@@ -163,6 +163,22 @@
    (if-let [v (m key)]
      [flag (str v)]))
 
+(defn generate-from-conf [basefolder gen-conf]
+  (let [g (partial get-opt gen-conf)]
+    (apply
+      generate-graphs
+      (concat
+        (g :%ifs "--percentageifs")
+        (g :#graphs "-n")
+        (g :lang "-L")
+        (g :#levels "-l")
+        (g :seed "-s")
+        (g :%maps "--percentagemaps")
+        (g :%funs "--percentagefuns")
+        (g :%sources "--percentagesources")
+        (if (contains? gen-conf :+slow) "--slowdatasource")
+         ["-o" (str basefolder)]))))
+
 
 (defn run-experiment [system runner exp-type codestyle gen-conf]
   (let [basefolder (str "yauhau/experiment/clojure/generated/" system "/" exp-type "/" codestyle "/")
@@ -175,27 +191,16 @@
        (doseq [f (.listFiles (file basefolder))]
          (delete-file f))
        (println "generating...")
-       (apply
-         generate-graphs
-         (concat
-           (g :%ifs "--percentageifs")
-           (g :#graphs "-n")
-           (g :lang "-L")
-           (g :#lvls "-l")
-           (g :seed "-s")
-           (g :%maps "--percentagemaps")
-           (g :%funs "--percentagefuns")
-           (g :%sources "--percentagesources")
-           (if (contains? gen-conf :+slow) "--slowdatasource")
-            ["-o" (str basefolder)]))
+       (generate-from-conf basefolder gen-conf)
        (println "finished generating")))
    (println "Starting experiments")
    (let [results
-         (into []
+         (->> (seq (.listFiles (file basefolder)))
            (mapcat
              (fn [f]
                (if-let [m (re-find #"^(.+)\.clj$" (.getName f))]
-                 (run-one-test runner basenamespace (second m))))
-             (seq (.listFiles (file basefolder)))))]
+                 (run-one-test runner basenamespace (second m)))))
+           (map #(assoc % "gen-conf" gen-conf))
+           (into []))]
      (clojure.pprint/print-table results)
      (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results)))))

@@ -61,15 +61,15 @@
 (defn with-if []
   (let [base-gen-conf {:%ifs 1
                        :#graphs 7
-                       :#lvls 7
+                       :#levels 7
                        :seed 123456}]
 
     (doall (map (fn [style lang] (run-yauhau-experiment "if" style (assoc base-gen-conf :lang lang))) ["app" "monad"] ["OhuaApp" "Ohua"]))))
 
 (defn with-map []
-  (let [gen-conf {:%maps 0.2
-                  :#graphs 3
-                  :#lvls 7
+  (let [gen-conf {:%maps 0.4
+                  :#graphs (* 5 7)
+                  :#levels 7
                   :seed 123456
                   :lang "Ohua"}]
     (run-yauhau-experiment "map" "monad" gen-conf)))
@@ -86,18 +86,14 @@
         (apply concat
           (for [seed [123456 234567]
                 percentage [0.1 0.2 0.3 0.4]]
-            (do
+            (let [gen-conf {:lang lang
+                            :#graphs 1
+                            :#levels 20
+                            :seed seed
+                            :%funs percentage}]
               (doseq [f (.listFiles (file basefolder))]
                 (delete-file f))
-              (println "generating" seed percentage)
-              (generate-graphs
-                "-n" "1"
-                "-l" "20"
-                "-L" (str lang)
-                "--percentagefuns" (str percentage)
-                "-s" (str seed)
-                "-o" (str basefolder))
-              (println "finished generating")
+              (generate-from-conf basefolder gen-conf)
               (doseq [f (.listFiles (file basefolder))]
                 (println (str f)))
               (println "Starting experiments")
@@ -111,16 +107,15 @@
                         (println f2)
                         (.renameTo f f2)
                         (doall
-                          (map (fn [res] (assoc res "if_percentage" percentage)) (run-one-test runner basenamespace n))))))
+                          (map (fn [res] (assoc res :gen_conf gen-conf)) (run-one-test runner basenamespace n))))))
                   (seq (.listFiles (file basefolder))))))))]
     (clojure.pprint/print-table results)
     (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results))))
 
 
 (defn with-func []
-  (let [base-gen-conf {:%ifs 0.3
-                       :#graphs 7
-                       :#lvls 7
+  (let [base-gen-conf {:#graphs (* 7 5)
+                       :#levels 7
                        :seed 123456
                        :%funs 0.3}]
 
