@@ -59,8 +59,8 @@
 (def run-yauhau-experiment (partial run-experiment "yauhau" runner))
 
 (defn with-if []
-  (let [base-gen-conf {:%ifs 1
-                       :#graphs 7
+  (let [base-gen-conf {:%ifs 0.5
+                       :#graphs 35
                        :#levels 7
                        :seed 123456}]
 
