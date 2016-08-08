@@ -127,20 +127,20 @@
         (doall
           (map (fn [[f-name f]]
                  (println "Starting execution of function: " f-name)
-                 (let [levels (levels-from-fname f-name)]
-                   ;prepare
-                   (reset-fetch-count )
-                   (set! Functionality/READ_REQUEST_COUNTER 0)
-                   (set! Functionality/WRITE_REQUEST_COUNTER 0)
-                   (reset-round-count)
-                   ; execute the function
-                   (f)
+                 (let [levels (levels-from-fname f-name)
+                       _ (do
+                           (reset-fetch-count )
+                           (set! Functionality/READ_REQUEST_COUNTER 0)
+                           (set! Functionality/WRITE_REQUEST_COUNTER 0)
+                           (reset-round-count))
+                       time (measure-exec-time (f))]
                    ; collect the number of I/O calls
                    {"fetches"     (read-fetch-count)
                     "rounds" (read-round-count)
                     "levels"           (Integer. levels)
                     "read_requests"    (Functionality/READ_REQUEST_COUNTER)
-                    "write_requests"   (Functionality/WRITE_REQUEST_COUNTER)}))
+                    "write_requests"   (Functionality/WRITE_REQUEST_COUNTER)
+                    "time" time}))
                test-fns))))
 
 
@@ -176,8 +176,8 @@
         (g :%maps "--percentagemaps")
         (g :%funs "--percentagefuns")
         (g :%sources "--percentagesources")
-        (if (contains? gen-conf :+slow) "--slowdatasource")
-         ["-o" (str basefolder)]))))
+        (if (gen-conf :+slow) ["--slowdatasource"])
+        ["-o" (str basefolder)]))))
 
 
 (defn run-experiment [system runner exp-type codestyle gen-conf]
