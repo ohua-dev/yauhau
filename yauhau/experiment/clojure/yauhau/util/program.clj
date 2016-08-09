@@ -89,7 +89,6 @@
         _ (set! FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)
 
         ; finally force to load the function in the file to the namespace
-        _ (println name)
         _ (require name)
         _ (in-ns (symbol curr-ns))
         ;_ (println "test-program?" *ns*)

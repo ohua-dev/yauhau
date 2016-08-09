@@ -64,7 +64,6 @@
   (let [basefolder (str "yauhau/experiment/clojure/generated/" system "/" (string/replace exp-type "-" "_") "/" codestyle "/")
         basenamespace (str "generated." system "." exp-type "." codestyle)
         _ (do
-            (println "cleaning...")
             (make-parents (str basefolder "abc")))
         results
         (mapcat
@@ -72,9 +71,6 @@
             (doseq [f (.listFiles (file basefolder))]
               (delete-file f))
             (generate-from-conf basefolder gen-conf)
-            (doseq [f (.listFiles (file basefolder))]
-              (println (str f)))
-            (println "Starting experiments")
             (doall
               (mapcat
                 (fn [f]
@@ -82,7 +78,6 @@
                     (let [c (swap! counter inc)
                           n (str (second m) c)
                           f2 (file (str basefolder "/" n ".clj") )]
-                      (println f2)
                       (.renameTo f f2)
                       (doall
                         (map (fn [res] (assoc res :gen_conf gen-conf)) (run-one-test runner basenamespace n))))))
@@ -94,7 +89,7 @@
 
 (def default-gen-conf {:lang "Ohua"
                        :#graphs 1
-                       :#levels 10})
+                       :#levels 12})
 
 (def if-confs (for [seed [123456 234567]
                   percentage [0.1 0.2 0.3 0.4]]
