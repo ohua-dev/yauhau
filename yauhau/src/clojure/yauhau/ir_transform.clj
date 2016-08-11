@@ -341,30 +341,16 @@
             (inc new-id)))))))
 
 
-(defn- gen-empty-for [amount out]
+(defn- gen-empty-for [amount in]
   (mdo
-    names <- (sequence-m (repeatedly amount (fn [] (state-mk-names 2))))
-    let outs = (cons out (map first names))
-    inserts <- (fmap (partial apply concat)
-                     (mapM
-                       (fn [[req-in fetch-in fetch-out]]
-                         (lift-m*
-                           vector
-                           ; TODO these empties can share one request
-                           ; There is no reason why there should be one distinct request
-                           ; for each fetch. They can share the same since the result is discarded anyways
-                           ; This would also solve the issue of additional forced rounds.
-                           ; Issue of additional forced rounds:
-                           ;    If all inserted empty fetches depend on one another
-                           ;    each of them has to be in a different round.
-                           ;    however the other branch may have parallel fetches
-                           ;    which could be in the same round but the dependant empties
-                           ;    force distict rounds after they've been merged.
-                           (state-mk-empty-req [req-in] fetch-in)
-                           (state-mk-fetch [fetch-in] fetch-out)))
-                       (map conj names outs)))
+    req-out <- state-mk-name
+    req <- (state-mk-empty-req [in] req-out)
+    inserts <- (sequence-m
+                  (repeatedly
+                    amount
+                    (fn [] (>>= state-mk-name (partial state-mk-fetch [req-out])))))
     let _ = (assert-coll-of-type IRFunc inserts (str (into [] inserts)))
-    (return [inserts (last outs)])))
+    (return inserts)))
 
 
 (defn- get-fetches-concerned [curr-if]
@@ -433,31 +419,19 @@
             (fn [m [if-port fetches]]
               (mdo
                 let to-gen = (- longest-nr (count fetches))
-                _ = (assert-number to-gen)
-                _ = (l/printline "generating" to-gen "empty fetches")
-                no-fetches = (zero? (count fetches))
-                out-var <- (if no-fetches state-mk-name (return (.-return (last fetches))))
+                if-port-name <- (fmap (fn [op] (nth (:return op) if-port)) (state-find-func if-op))
+                null-out <- state-mk-name
+                null <- (state-mk-func
+                          'yauhau.functions/__constNull
+                          [^{:in-idx -1} if-port]
+                          null-out)
                 let if-stack = (conj shortened-if-stack (assoc last-stack-entry :arg-id if-port))
-                [generated new-out-var] <- (gen-empty-for to-gen out-var)
+                generated <- (gen-empty-for to-gen null-out)
                 let _ = (l/printline "Generated" generated)
                 (state-label-all-with if-stack generated)
                 ;_ = (assert-coll empties)
                 ;_ = (assert-type IRFunc (.-function (first empties)))
-                let in-var = (first (.-args (first generated)))
-                to-replace = (if no-fetches if-op (last fetches))
-                _ = (l/printline "fetch end" (last fetches))
-                _ = (assert-coll-of-type IRFunc fetches)
-                replacement-head <-
-                (if no-fetches
-                  (mdo
-                    if-port-name <- (fmap (fn [op] (nth (:return op) if-port)) (state-find-func if-op))
-                    null <- (state-mk-func
-                              'yauhau.functions/__constNull
-                              [^{:in-idx -1} if-port]
-                              (first (.-args (first generated))))
-                    (return [if-op null]))
-                  (return [(assoc (last fetches) :return in-var)]))
-                (return (assoc! m to-replace (into [] (concat replacement-head generated))))))
+                (return (assoc! m if-op (into [] (concat [if-op null] generated))))))
             (transient {})
             empty-required))
     let _ = (l/printline "Empties replacement map:" empties-replacement-map)

@@ -93,7 +93,7 @@
 
 (def if-confs (for [seed [123456 234567]
                   percentage [0.1 0.2 0.3 0.4]]
-              (merge default-gen-conf {:%ifs percentage :seed seed})))
+              (merge default-gen-conf {:#levels 10 :%ifs percentage :seed seed})))
 
 (defn with-func []
   (let [confs (for [seed [123456 234567]

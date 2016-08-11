@@ -8,6 +8,7 @@ package yauhau.functions;
 
 import com.ohua.lang.defsfn;
 import yauhau.Request;
+import com.ohua.lang.compile.analysis.qual.ReadOnly;
 
 import java.util.ArrayList;
 
@@ -20,7 +21,7 @@ import java.util.ArrayList;
  */
 public final class FetchOp<P, R> {
     @defsfn
-    public R fetch(Request<P, R> request) {
+    public R fetch(@ReadOnly Request<P, R> request) {
         ArrayList<P> l = new ArrayList<>();
         l.add(request.getPayload());
         Iterable<R> res = request.getDataSource().fetch(l);
