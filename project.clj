@@ -14,7 +14,8 @@
 
   :dependencies [[org.clojure/clojure "1.8.0"]
                  ;[ohua/ohua "0.6.2"]
-                 [bwo/monads "0.2.2"]]
+                 [bwo/monads "0.2.2"]
+                 [aysylu/loom "0.6.0"]]
 
   :profiles {:provided {:dependencies [[org.clojure/clojure "1.8.0"]]}
              :dev      {:plugins      [[lein-junit "1.1.8"]]
