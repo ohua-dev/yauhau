@@ -19,7 +19,7 @@
             [clojure.string :as string])
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
-; (set! (. com.ohua.engine.utils.GraphVisualizer PRINT_FLOW_GRAPH) (str "test/level-graph-flow"))
+(set! (. com.ohua.engine.utils.GraphVisualizer PRINT_FLOW_GRAPH) (str "test/level-graph-flow"))
 
 (defn trace [thing]
   (println thing)
@@ -86,14 +86,16 @@
     (clojure.pprint/print-table results)
     (spit (str "test/" system "-" exp-type "-" codestyle ".json") (to-json results))))
 
+(set! yauhau.functions.Functionality$DummyDataSource/delay 0)
 
 (def default-gen-conf {:lang "Ohua"
                        :#graphs 1
                        :#levels 12})
 
 (def if-confs (for [seed [123456 234567]
-                  percentage [0.7 0.8 0.9 1]]
-              (merge default-gen-conf {:#levels 30 :%ifs percentage :seed seed})))
+                    percentage [0.7 0.8 0.9 1]
+                    inline [false true]]
+              (merge default-gen-conf {:#levels 10 :%ifs percentage :seed seed :inline_if inline})))
 
 (defn with-func []
   (let [confs (for [seed [123456 234567]

@@ -1,9 +1,10 @@
 (ns yauhau.side-effect-transform
   (:require [com.ohua.ir :as ir]
-            [loom.graph :refer [digraph]]
+            [loom.graph :refer [digraph successors nodes add-edges add-nodes]]
             [loom.attr :refer [add-attr]]
             [monads.core :refer [mdo return modify >>= get-state put-state]]
-            [monads.state :as st]))
+            [monads.state :as st]
+            [clojure.set :as setlib]))
 
 
 (defn is-algo? [ctx] (= 'com.ohua.lang/algo-in (:type %)))
@@ -14,7 +15,7 @@
 
 
 (defn state-add-edges [& args] (modify #(apply add-edges % args)))
-(defn state-add-label [& args] (modify #(apply add-label % args)))
+(defn state-add-attr [& args] (modify #(apply add-attr % args)))
 
 
 (defn mapM
@@ -29,18 +30,29 @@
 
 
 (defn reduce-graph [f ir-graph node]
-  (loop [currents [node]
-         nil
-         visited #{node}]
-    (let [all-succs (set (mapcat #(ir/successors ir-graph %) currents))
-          new (setlib/difference all-succs visited)
-          new-visited (setlib/union new visited)
-          [new-succs new-acc] (f new acc)]
-      (if (empty? new-succs)
-        new-acc
-        (recur new-succs
-               new-acc
-               new-visited)))))
+  (let [arg-map (persistent!
+                  (reduce
+                    (fn [m x]
+                      (reduce
+                        #(assoc! %1 %2 (conj (get %1 %2 #{}) x))
+                        m
+                        (.-args x)))
+                    (transient {})
+                    ir-graph))
+        successors (fn [node]
+                      (apply setlib/union (map arg-map (.-return node))))]
+    (loop [currents [node]
+           nil
+           visited #{node}]
+      (let [all-succs (apply setlib/union (map #(successors %) currents))
+            new (setlib/difference all-succs visited)
+            new-visited (setlib/union new visited)
+            [new-succs new-acc] (f new acc)]
+        (if (empty? new-succs)
+          new-acc
+          (recur new-succs
+                 new-acc
+                 new-visited))))))
 
 
 (defn get-subsequent-where [keep discard ir-graph node]
@@ -67,7 +79,7 @@
   (let [algos (set (mapcat (partial filter is-algo?) (vals label-map)))
         algo-graph (apply add-nodes (digraph) algos)
         algo-op-id-map (apply hash-map (mapcat (fn [algo] [(:op-id algo) algo]) algos))]
-    (run-state
+    (st/run-state
       (mdo
         let algo-outs = (filter is-algo-out? ir-graph)
         (mapM
@@ -98,25 +110,29 @@
     gr algo-in))
 
 
-(defn label-reads-and-writes [ir label-map]
-  (mdo
-    s <- get-state
-    let mapped-algos = (->> ir
-                            (filter is-algo-in?)
-                            (mapcat (fn [node] [(:id node) node])
-                            (apply hash-map)))
+(defn- get-reads-and-writes [ir]
+  (let [all (group-by :name
+              (filter (comp #{'yauhau.function/write 'yauhau.functions/fetch 'fetch 'write} :name) ir))]
+    [(concat (all 'yauhau.functions/fetch) (all 'fetch))
+     (concat (all 'yauhau.functions/write) (all 'write))]))
 
-    (mapM
-      (fn [algo]
-        (let [{does-read :does-read does-write :does-write} (does-rw ir label-map (mapped-algos (:op-id algo)))]
-          (mdo
-            (state-add-label algo :does-read does-read)
-            (state-add-label algo :does-write does-write))))
-      (nodes s))))
+
+(defn label-reads-and-writes [ir label-map]
+  (let [[reads writes] (get-reads-and-writes)
+        associated-algos (fn [node] (filter #(= com.ohua.lang/algo-in (:type %)) (label-map (.-id node))))
+        does-read? (set (mapcat associated-algos reads))
+        does-write? (set (mapcat associated-algos writes))]
+    (mdo
+      (mapM
+        (fn [n]
+          (state-add-label n :does-read (does-read? n))
+          (state-add-label n :does-write (does-write? n))))
+        (nodes s))
+      )))
 
 
 (defn side-effect-transform [{ir-graph :graph label-map :ctxt-map}]
-  (run-state
+  (st/run-state
     (mdo
       (label-reads-and-writes ir-graph label-map)
       )

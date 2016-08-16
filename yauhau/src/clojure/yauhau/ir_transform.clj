@@ -61,12 +61,12 @@
 (def mk-select (mk-func-maker 'com.ohua.lang/select))
 (def mk-fetch (mk-func-maker 'yauhau.functions/fetch))
 (def mk-id-op (mk-func-maker 'yauhau.functions/identity))
-(defn mk-empty-request [in out] (ir/mk-func 'yauhau.functions/__emptyRequest [in '__constDataSource] out))
-(defn mk-const-nil [in out] (ir/mk-func 'yauhau.functions/__constNull in out))
+(defn mk-empty-request [in out] (ir/mk-func 'yauhau.functions/__empty-request [in '__constDataSource] out))
+(defn mk-const-nil [in out] (ir/mk-func 'yauhau.functions/__const-null in out))
 
 
 (defmulti fn-to-id type)
-(defmethod fn-to-id LabeledFunction [f] (.-id (.-functions f)))
+(defmethod fn-to-id LabeledFunction [f] (.-id (.-function f)))
 (defmethod fn-to-id IRFunc [f] (.-id f))
 (defmethod fn-to-id Long [id] id)
 
@@ -171,7 +171,7 @@
 (def state-mk-select (partial state-mk-func "select")) ; TODO When select is fixed this function needs to be changed
 (def state-mk-fetch (partial state-mk-func 'yauhau.functions/fetch))
 (def state-mk-id (partial state-mk-func-unindexed 'yauhau.functions/identity))
-(def state-mk-empty-req (partial state-mk-func 'yauhau.funtions/__emptyRequest))
+(def state-mk-empty-req (partial state-mk-func 'yauhau.functions/__empty-request))
 (defn state-delete-fn [func]
   (mdo
     (unsafe-modify-graph (partial ir/drop-node func))
@@ -181,7 +181,7 @@
     (unsafe-modify-graph (partial ir/drop-nodes funcs))
     (state-delete-labels funcs)))
 (def get-graph (fmap :graph get-state))
-(defn state-find-func [id] (fmap (comp first (partial filter (comp (partial = id) :id))) get-graph))
+(defn state-find-func [id] (fmap (fn [gr] (first (filter #(= id (.-id %)) gr))) get-graph))
 (defn state-replace-node
   ([old new label]
    (mdo
@@ -212,9 +212,10 @@
   (let [if-id (fn-to-id if-fn)
         stack (label-map (fn-to-id target))
         {op-id :op-id :as top} (last (filter (fn [{t :type}] (= 'if t)) stack))]
-    (if (not (= if-id op-id))
-      (throw (RuntimeException. "Topmost if stackframe pointed to unexpected operator"))
-      top)))
+    (cond
+      (nil? top) nil
+      (= if-id op-id) top
+      :else (throw (RuntimeException. (str "Topmost if stackframe pointed to unexpected operator: " top))))))
 (defn- state-topmost-if-frame [if-fn target]
   (fmap (fn [map] (topmost-if-frame map if-fn target)) get-label-map))
 
@@ -343,14 +344,21 @@
 
 (defn- gen-empty-for [amount in]
   (mdo
+    null-out <- state-mk-name
+    null-id <- state-gen-id
+    let null = (ir/->IRFunc
+                 null-id
+                 'yauhau.functions/__const-null
+                 [(vary-meta in assoc :in-idx -1)]
+                 null-out)
     req-out <- state-mk-name
-    req <- (state-mk-empty-req [in] req-out)
+    req <- (state-mk-empty-req [null-out] req-out)
     inserts <- (sequence-m
                   (repeatedly
                     amount
                     (fn [] (>>= state-mk-name (partial state-mk-fetch [req-out])))))
     let _ = (assert-coll-of-type IRFunc inserts (str (into [] inserts)))
-    (return inserts)))
+    (return (concat [null req] inserts))))
 
 
 (defn- get-fetches-concerned [curr-if]
@@ -359,14 +367,10 @@
     (return
       (filter
         (fn [func]
-          (let [_ (assert-type IRFunc func)
-                label (label-map (canonicalize-label-key func))]
-            (and
-              (is-fetch? func)
-              (not (empty? label))
-              (let [found-if (:op-id (peek label))
-                    _ (l/printline "if op is" (:op-id (peek label)) "Current if is" (.-id (.-function curr-if)))]
-                (= (.-id (.-function curr-if)) found-if)))))
+          (and
+            (is-fetch? func)
+            (let [found-if (topmost-if-frame label-map curr-if func)]
+              (= (.-id (.-function curr-if)) (:op-id found-if)))))
         graph))))
 
 
@@ -405,39 +409,36 @@
   (mdo
     let _ = (assert-type LabeledFunction labeled-if (str "If op has incorrent type <" (type labeled-if) ">"))
     mapped-to-port <- (mapped-fetches-for-if labeled-if fetches-concerned)
-    let _ = (l/printline "Mapped to port:" mapped-to-port)
     let longest-fetch-seq = (apply max-key count (vals mapped-to-port))
     longest-nr = (count longest-fetch-seq)
-    _ = (l/printline "Fetch seq is" longest-fetch-seq)
-    shortened-if-stack <- (state-get-label if-op)
-    last-stack-entry <- (state-topmost-if-frame if-op (first longest-fetch-seq))
-    let empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
+    empty-required = (remove (comp zero? (partial - longest-nr) count second) (seq mapped-to-port))
 
-    empties-replacement-map <-
-    (fmap persistent!
-          (fold-m
-            (fn [m [if-port fetches]]
-              (mdo
-                let to-gen = (- longest-nr (count fetches))
-                if-port-name <- (fmap (fn [op] (nth (:return op) if-port)) (state-find-func if-op))
-                null-out <- state-mk-name
-                null <- (state-mk-func
-                          'yauhau.functions/__constNull
-                          [^{:in-idx -1} if-port]
-                          null-out)
-                let if-stack = (conj shortened-if-stack (assoc last-stack-entry :arg-id if-port))
-                generated <- (gen-empty-for to-gen null-out)
-                let _ = (l/printline "Generated" generated)
-                (state-label-all-with if-stack generated)
-                ;_ = (assert-coll empties)
-                ;_ = (assert-type IRFunc (.-function (first empties)))
-                (return (assoc! m if-op (into [] (concat [if-op null] generated))))))
-            (transient {})
-            empty-required))
-    let _ = (l/printline "Empties replacement map:" empties-replacement-map)
-    (unsafe-modify-graph (partial ir/update-graph empties-replacement-map))
-    (fmap (comp l/printline (partial visual/graph-to-str)) get-graph)
-    (return (first (get empties-replacement-map if-op [if-op])))))
+    (if (empty? empty-required)
+      (return if-op)
+      (mdo
+        shortened-if-stack <- (state-get-label if-op)
+        last-stack-entry <- (state-topmost-if-frame if-op (first longest-fetch-seq))
+
+        empties-replacement-map <-
+        (fmap persistent!
+              (fold-m
+                (fn [m [if-port fetches]]
+                  (mdo
+                    let to-gen = (- longest-nr (count fetches))
+                    let if-stack = (into [] (conj shortened-if-stack (assoc last-stack-entry :out-var (.indexOf (.-return if-op) if-port))))
+                    generated <- (gen-empty-for to-gen if-port)
+                    let _ = (l/printline "Generated" generated)
+                    (state-label-all-with if-stack generated)
+                    ;_ = (assert-coll empties)
+                    ;_ = (assert-type IRFunc (.-function (first empties)))
+                    (return (assoc! m if-op (into [] (cons if-op generated))))))
+                (transient {})
+                empty-required))
+        lm <- get-label-map
+        let _ = (l/printline "label map" lm)
+        (unsafe-modify-graph (partial ir/update-graph empties-replacement-map))
+        (fmap (comp l/printline (partial visual/graph-to-str)) get-graph)
+        (return (first (get empties-replacement-map if-op [if-op])))))))
 
 
 (def ^:private state-get-if-handled-fns (fmap (comp :handled-functions :if-rewrite-private-state) get-state))
@@ -491,9 +492,9 @@
                identity-ops <- (mapM
                                  (fn [{ret :return :as fun}]
                                    (mdo
-                                     label <- (state-get-label (assert-not-nil fun "423"))
+                                     frame <- (state-topmost-if-frame if-op fun)
                                      id <- state-gen-id
-                                     (state-mk-id [(vary-meta ((.-return resolved-func) (:out-var (last label))) assoc :in-idx -1)
+                                     (state-mk-id [(vary-meta ((.-return resolved-func) (:out-var frame)) assoc :in-idx -1)
                                                    (vary-meta fetch-out assoc :in-idx 0)]
                                                   (if (seq? ret)
                                                     (ir/reindex-stuff :out-idx ret)
@@ -735,6 +736,7 @@
   (validate-and-log "batch-rewrite")
   (fn [{graph :graph :as g}]
     (l/printline "Applied transformations")
+    (visual/render-to-file "if-debug" graph)
     (l/log-graph graph)
     g)])
 

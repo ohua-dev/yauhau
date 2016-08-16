@@ -14,7 +14,7 @@ import yauhau.Request;
  */
 public final class ConstNull {
     @defsfn
-    public Request __constNull() {
+    public Object __constNull() {
         return null;
     }
 }

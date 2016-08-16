@@ -166,7 +166,8 @@
   (let [g (partial get-opt gen-conf)]
     (apply
       generate-graphs
-      (concat
+      ((fn [a] (println a) a) 
+        (concat
         (g :%ifs "--percentageifs")
         (g :#graphs "-n")
         (g :lang "-L")
@@ -176,7 +177,8 @@
         (g :%funs "--percentagefuns")
         (g :%sources "--percentagesources")
         (if (gen-conf :+slow) ["--slowdatasource"])
-        ["-o" (str basefolder)]))))
+        (if (gen-conf :inline_if) ["-i"])
+        ["-o" (str basefolder)])))))
 
 
 (defn run-experiment [system runner exp-type codestyle gen-conf]

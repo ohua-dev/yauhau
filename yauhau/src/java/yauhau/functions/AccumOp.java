@@ -58,7 +58,7 @@ public class AccumOp {
         public Object[] __accumFetch(@ReadOnly RequestTree... requests) throws Throwable {
 
             for (int i=0; i < requests.length; i++)
-                if (requests[i] == null) throw new Exception("Request tree " + i + " of " + requests.length + " is null.");
+                if (requests[i] == null) throw new Exception("Request tree " + (i + 1) + " of " + requests.length + " is null.");
 
             Request[] rqarr = Arrays.stream(requests).flatMap(RequestTree::getRequestsStream).toArray(Request[]::new);
 
