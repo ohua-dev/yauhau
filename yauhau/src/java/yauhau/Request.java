@@ -7,7 +7,9 @@
 package yauhau;
 
 
-import java.util.*;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
@@ -22,19 +24,19 @@ public final class Request<P, R> extends RequestTree {
     private final P payload;
     private final IDataSource<P, R> dataSource;
 
+    public Request(P payload, IDataSource<P, R> dataSource) {
+        this.payload = payload;
+        this.dataSource = dataSource;
+    }
+
     @Override
     public Stream<Request> getRequestsStream() {
         return Collections.singletonList((Request) this).stream();
     }
 
     @Override
-    public Iterable<Object> buildResult(Map<Request, Object> responses) {
-        return Collections.singletonList(responses.get(this));
-    }
-
-    public Request(P payload, IDataSource<P, R> dataSource) {
-        this.payload = payload;
-        this.dataSource = dataSource;
+    public Object buildResult(Map<Request, Object> responses) {
+        return responses.get(this);
     }
 
     public P getPayload() {
@@ -61,6 +63,12 @@ public final class Request<P, R> extends RequestTree {
 
     @Override
     public String toString() {
-        return "Request with <" + getPayload().toString() + "> on <" + getDataSource().toString() + ">";
+        return payload.toString();
+//        return "Request with <" + getPayload().toString() + "> on <" + getDataSource().toString() + ">";
+    }
+
+    @Override
+    public int height() {
+        return 1;
     }
 }

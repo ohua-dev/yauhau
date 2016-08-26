@@ -6,6 +6,7 @@
 
 package yauhau;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -27,7 +28,20 @@ public final class RequestTreeBranch extends RequestTree {
     }
 
     @Override
-    public Iterable<Object> buildResult(Map<Request, Object> responses) {
-        return StreamSupport.stream(subtrees.spliterator(), false).map(t -> t.buildResult(responses)).collect(Collectors.toList());
+    public Object buildResult(Map<Request, Object> responses) {
+        List<Object> res = StreamSupport.stream(subtrees.spliterator(), false).map(t -> t.buildResult(responses)).collect(Collectors.toList());
+//        System.out.println(res.size());
+//        System.out.println(res);
+        return res;
+    }
+
+    @Override
+    public String toString() {
+        return subtrees.toString();
+    }
+
+    @Override
+    public int height() {
+        return 1 + subtrees.iterator().next().height();
     }
 }

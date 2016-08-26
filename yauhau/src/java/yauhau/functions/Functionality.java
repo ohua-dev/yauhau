@@ -6,8 +6,8 @@
 
 package yauhau.functions;
 
-import com.ohua.lang.defsfn;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
+import com.ohua.lang.defsfn;
 import yauhau.IDataSource;
 import yauhau.Request;
 
@@ -157,6 +157,7 @@ public class Functionality {
 
         public static final int DELAY_FACTOR = 100;
         public static int delay = 5;
+        private Integer counter = 0;
 
         @Override
         public Object getIdentifier() {
@@ -176,7 +177,7 @@ public class Functionality {
 //        } catch (InterruptedException e) {
 //          e.printStackTrace();
 //        }
-                result.add("foo");
+                result.add(counter++);
             }
             try {
                 Thread.sleep((long) getDelay() * DELAY_FACTOR);

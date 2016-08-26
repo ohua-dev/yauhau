@@ -9,6 +9,7 @@
             [com.ohua.link]
             [com.ohua.logging :refer [enable-compilation-logging]]
             [com.ohua.util.gen :refer [def-sfn def-sfn-dt]]
+            [com.ohua.compile :refer [enable-ir-graphs]]
             [yauhau.ir-transform :as trans]
             [yauhau.cache-transform :as cache]
             [yauhau.concurrent-io-transform :as conc-io]
@@ -20,6 +21,7 @@
   (:use yauhau.util.program)
   (:import (yauhau.functions Functionality AccumOp)))
 (set! (. com.ohua.engine.utils.GraphVisualizer PRINT_FLOW_GRAPH) (str "test/level-graph-flow"))
+; (enable-ir-graphs)
 
 (defn trace [thing]
   (println thing)
@@ -29,7 +31,7 @@
 
 
 (defmacro ohua [& args]
-  `(o/<-ohua
+  `(o/ohua
      ~@args
      :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
@@ -88,11 +90,11 @@
 
 (set! yauhau.functions.Functionality$DummyDataSource/delay 0)
 
-(def default-gen-conf {:lang "Ohua"
+(def default-gen-conf {:lang    "Ohua"
                        :#graphs 1
-                       :#levels 12})
+                       :#levels 10})
 
-(def if-confs (for [seed [123456 234567]
+(def if-confs (for [seed [123456 234567 111111]
                     percentage [0.7 0.8 0.9 1]
                     inline [false true]]
               (merge default-gen-conf {:#levels 10 :%ifs percentage :seed seed :inline_if inline})))
@@ -104,6 +106,7 @@
   (run-prct-exp "yauhau" runner "func" "monad" confs)))
 
 (defn with-if []
+  ;(reset! CATCH_EXCEPTIONS true)
   (run-prct-exp "yauhau" runner "if" "monad" if-confs))
 
 (defn with-if-delayed []
@@ -111,7 +114,7 @@
 
 (defn with-map []
   (let [confs (for [seed [123456 234567]
-                    percentage [0.1 0.2 0.3 0.4]]
+                    percentage [0.1, 0.15, 0.2, 0.25, 0.275, 0.3, 0.325, 0.375, 0.35]]
                 (merge default-gen-conf {:%maps percentage :seed seed}))]
     (run-prct-exp "yauhau" runner "map" "monad" confs)))
 
@@ -122,4 +125,4 @@
   (with-func))
 
 (defn temp []
-  (run-prct-exp "yauhau" runner "temp" "monad" [(merge default-gen-conf {:#levels 20 :%ifs 0.5 :seed 123456})]))
+  (run-prct-exp "yauhau" runner "temp" "monad" [(merge default-gen-conf {:#levels 5 :%maps 0.5 :seed 123456})]))

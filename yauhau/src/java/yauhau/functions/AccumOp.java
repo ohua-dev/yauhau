@@ -56,9 +56,10 @@ public class AccumOp {
     public static class AccumulateAndFetch extends Accumulation {
         @defsfn
         public Object[] __accumFetch(@ReadOnly RequestTree... requests) throws Throwable {
-
-            for (int i=0; i < requests.length; i++)
-                if (requests[i] == null) throw new Exception("Request tree " + (i + 1) + " of " + requests.length + " is null.");
+            for (int i = 0; i < requests.length; i++) {
+                if (requests[i] == null)
+                    throw new Exception("Request tree " + (i + 1) + " of " + requests.length + " is null.");
+            }
 
             Request[] rqarr = Arrays.stream(requests).flatMap(RequestTree::getRequestsStream).toArray(Request[]::new);
 
@@ -100,7 +101,11 @@ public class AccumOp {
                     Tuple::get1,
                     Tuple::get2
             ));
-            Object[] result = Arrays.stream(requests).map(r -> r.buildResult(finishedRequests)).toArray();
+            Object[] result = new Object[requests.length];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = requests[i].buildResult(finishedRequests);
+            }
+            //Object[] result = Arrays.stream(requests).map(r -> r.buildResult(finishedRequests)).toArray();
             IO_ROUND_COUNTER++;
             return result;
         }

@@ -28,6 +28,8 @@
 
 (def code-gen-executable "random-level-graphs")
 
+(def CATCH_EXCEPTIONS (atom false))
+
 (defmacro get-data [& args]
   (if (and (< (count args) 3)
            (not (symbol? (second (reverse args)))))
@@ -121,6 +123,16 @@
   (set! AccumOp/IO_ROUND_COUNTER 0))
 
 
+(defn executor [func]
+  (if @CATCH_EXCEPTIONS
+    (try
+      (func)
+      (catch Exception e
+        (println e)
+        nil))
+    (func)))
+
+
 (defn run-tests [test-fns reset-fetch-count reset-round-count read-fetch-count read-round-count]
   (into []
         (doall
@@ -132,7 +144,7 @@
                            (set! Functionality/READ_REQUEST_COUNTER 0)
                            (set! Functionality/WRITE_REQUEST_COUNTER 0)
                            (reset-round-count))
-                       time (measure-exec-time (f))]
+                       time (measure-exec-time (executor f))]
                    ; collect the number of I/O calls
                    {"fetches"     (read-fetch-count)
                     "rounds" (read-round-count)
@@ -166,8 +178,7 @@
   (let [g (partial get-opt gen-conf)]
     (apply
       generate-graphs
-      ((fn [a] (println a) a) 
-        (concat
+      (concat
         (g :%ifs "--percentageifs")
         (g :#graphs "-n")
         (g :lang "-L")
@@ -178,7 +189,7 @@
         (g :%sources "--percentagesources")
         (if (gen-conf :+slow) ["--slowdatasource"])
         (if (gen-conf :inline_if) ["-i"])
-        ["-o" (str basefolder)])))))
+        ["-o" (str basefolder)]))))
 
 
 (defn run-experiment [system runner exp-type codestyle gen-conf]

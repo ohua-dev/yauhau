@@ -6,8 +6,8 @@
 
 package yauhau.functions;
 
-import com.ohua.lang.defsfn;
 import com.ohua.lang.compile.analysis.qual.ReadOnly;
+import com.ohua.lang.defsfn;
 import yauhau.Request;
 
 import java.util.Arrays;
@@ -132,7 +132,7 @@ public class Caching {
 
     public static class CachedAccumFetch extends AccumOp.AccumulateAndFetch {
         @defsfn
-        public Object[] __cachedAccumFetch(Cache cache, @ReadOnly Request... requests) {
+        public Object[] __cachedAccumFetch(Cache cache, @ReadOnly Request... requests) throws Throwable {
             // load requests that are not fetched yet
             List<Request> nonCachedRequests = Arrays.stream(requests).filter(l -> cache.get(l) == null).collect(Collectors.toList());
             Object[] fetchedResults;

@@ -16,9 +16,11 @@ import java.util.stream.Stream;
 public abstract class RequestTree {
     public abstract Stream<Request> getRequestsStream();
 
-    public abstract Iterable<Object> buildResult(Map<Request, Object> responses);
+    public abstract Object buildResult(Map<Request, Object> responses);
 
     public Iterable<Request> getRequests() {
         return getRequestsStream().collect(Collectors.toList());
     }
+
+    public abstract int height();
 }

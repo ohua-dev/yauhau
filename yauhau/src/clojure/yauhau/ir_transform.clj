@@ -9,14 +9,12 @@
             [yauhau.accumulator :as acc]
             [clojure.set :as setlib]
             [clojure.set :as set]
-            [clojure.pprint :refer [pprint]]
             [com.ohua.util.visual :as visual]
             [com.ohua.context :as ctxlib :refer [->LabeledFunction]]
             [monads.core :refer [mdo return modify >>= get-state put-state]]
             [monads.state :as st]
             [monads.util :as mutil :refer [sequence-m fold-m lift-m*]]
             [clojure.algo.generic.functor :refer [fmap]]
-            [clojure.pprint :as pprint]
             [com.ohua.logging :as l])
   (:import (com.ohua.ir IRFunc IRGraphPosition)
            (com.ohua.context LabeledFunction IFStackEntry SmapStackEntry)
@@ -208,16 +206,19 @@
                (mapM (fn [[node label]] (state-put-label node label)) new))))))
 
 
-(defn- topmost-if-frame [label-map if-fn target]
+(defn topmost-if-frame [label-map target]
+  (last (filter (fn [{t :type}] (= 'if t)) (label-map (fn-to-id target)))))
+
+
+(defn- matching-if-frame [label-map if-fn target]
   (let [if-id (fn-to-id if-fn)
-        stack (label-map (fn-to-id target))
-        {op-id :op-id :as top} (last (filter (fn [{t :type}] (= 'if t)) stack))]
+        {op-id :op-id :as top} (topmost-if-frame label-map target)]
     (cond
       (nil? top) nil
       (= if-id op-id) top
       :else (throw (RuntimeException. (str "Topmost if stackframe pointed to unexpected operator: " top))))))
-(defn- state-topmost-if-frame [if-fn target]
-  (fmap (fn [map] (topmost-if-frame map if-fn target)) get-label-map))
+(defn- state-matching-if-frame [if-fn target]
+  (fmap (fn [map] (matching-if-frame map if-fn target)) get-label-map))
 
 
 (defn get-largest-id
@@ -277,7 +278,7 @@
     new-collect <- (state-mk-func 'com.ohua.lang/collect [one-to-n-out f-fetch-arg] collect-out)
     tree-builder <- (state-mk-func 'yauhau.functions/__mk-req-branch [collect-out] new-fetch-in)
     new-one-to-n <- (state-mk-func 'com.ohua.lang/one-to-n [size-source fetch-out] smap-in)
-    new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] output)
+    new-smap <- (state-mk-func 'com.ohua.lang/smap-fun [smap-in] [output])
 
     let _ = (l/printline (meta size-source))
     _ = (l/printline (map meta (:args first-one-to-n)))
@@ -286,8 +287,7 @@
     (state-put-label first-one-to-n label)
     (state-label-all-with
       (if (nil? rest-label) [] rest-label)
-      [new-collect tree-builder new-one-to-n new-smap function])
-    (state-delete-label function)
+      [new-collect tree-builder new-one-to-n new-smap new-fetch])
     (unsafe-modify-graph (partial ir/update-graph {function [first-one-to-n new-collect tree-builder new-fetch new-one-to-n new-smap]}))))
 
 
@@ -369,7 +369,7 @@
         (fn [func]
           (and
             (is-fetch? func)
-            (let [found-if (topmost-if-frame label-map curr-if func)]
+            (let [found-if (topmost-if-frame label-map func)]
               (= (.-id (.-function curr-if)) (:op-id found-if)))))
         graph))))
 
@@ -400,7 +400,7 @@
                            ; TODO general reminder to find all places that assume
                            ; the currently handeled stack frame is the top frame for
                            ; all functions and replace them with the correct handling
-                           (let [{index :out-var} (topmost-if-frame label-map curr-if fun)]
+                           (let [{index :out-var} (matching-if-frame label-map curr-if fun)]
                              (out-ports index)))
                          fetches-concerned))))))
 
@@ -417,7 +417,7 @@
       (return if-op)
       (mdo
         shortened-if-stack <- (state-get-label if-op)
-        last-stack-entry <- (state-topmost-if-frame if-op (first longest-fetch-seq))
+        last-stack-entry <- (state-matching-if-frame if-op (first longest-fetch-seq))
 
         empties-replacement-map <-
         (fmap persistent!
@@ -468,7 +468,6 @@
     let _ = (assert-type LabeledFunction labeled-if)
     curr-if = (.-function labeled-if)
     _ = (assert-type IRFunc curr-if)
-    (fmap pprint get-graph)
     mapped-to-port <- (mapped-fetches-for-if labeled-if)
     let fetches = (vals mapped-to-port)
     _ = (l/printline "Mapped to port" mapped-to-port)
@@ -492,7 +491,7 @@
                identity-ops <- (mapM
                                  (fn [{ret :return :as fun}]
                                    (mdo
-                                     frame <- (state-topmost-if-frame if-op fun)
+                                     frame <- (state-matching-if-frame if-op fun)
                                      id <- state-gen-id
                                      (state-mk-id [(vary-meta ((.-return resolved-func) (:out-var frame)) assoc :in-idx -1)
                                                    (vary-meta fetch-out assoc :in-idx 0)]
@@ -727,6 +726,7 @@
 (def transformations
   [(fn [{graph :graph :as g}]
      (l/printline "Before transformations")
+     (visual/render-to-file "before-trans" graph)
      (l/log-graph graph)
      g)
   gen-ids
@@ -736,7 +736,7 @@
   (validate-and-log "batch-rewrite")
   (fn [{graph :graph :as g}]
     (l/printline "Applied transformations")
-    (visual/render-to-file "if-debug" graph)
+    (visual/render-to-file "after-trans" graph)
     (l/log-graph graph)
     g)])
 

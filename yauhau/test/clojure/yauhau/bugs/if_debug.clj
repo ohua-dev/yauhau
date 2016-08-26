@@ -1,12 +1,14 @@
 (ns yauhau.bugs.if-debug
-  (:require [com.ohua.lang :as o :refer [defalgo]]
+  (:require [com.ohua.lang :as o :refer [defalgo algo]]
             [clojure.test :refer [deftest is]]
             [yauhau.ir-transform]
-            [com.ohua.logging :refer [enable-compilation-logging]]))
+            [com.ohua.logging :refer [enable-compilation-logging]]
+            [com.ohua.util.visual :as visual]))
 
 
 (enable-compilation-logging)
 (set! (. com.ohua.engine.utils.GraphVisualizer PRINT_FLOW_GRAPH) (str "test/level-graph-flow"))
+(set! (. com.ohua.engine.utils.GraphVisualizer PRINT_SECTION_GRAPH) (str "test/section-graph"))
 (set! yauhau.functions.Functionality$DummyDataSource/delay 0)
 (set! com.ohua.lang.compile.FlowGraphCompiler/SKIP_DEPENDENCY_ANALYSIS true)
 
@@ -23,7 +25,7 @@
 (def compute yauhau.functions/compute)
 
 (defmacro ohua [& args]
-  `(o/<-ohua
+  `(o/ohua
      ~@args
      :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
@@ -35,7 +37,7 @@
  ; )))
  ; )
 (defalgo ifnelselocal11 [parameter-1 parameter-2 parameter-3]
-(compute parameter-1 parameter-2 (trace "else" parameter-3) (trace "independent get data" (get-data  "service-name" 41)) 40)
+  (compute parameter-1 parameter-2 (trace "else" parameter-3) (trace "independent get data" (get-data "service-name" 41)) 40)
 )
 
 (defalgo ifnthenlocal11 [parameter-1 parameter-2 parameter-3]
@@ -66,3 +68,17 @@
     ((constantly true) (doesnt-terminate))
     "The second one fails")
   )
+
+(deftest temp
+  (is 3
+      (count
+        (let [a [1 2 3]]
+          (o/<-ohua
+            (smap
+              (algo [item]
+                    (trace "out" (mvector (trace "in1" item) (trace "in2" 3))))
+              a)
+            :compile-with-config {:df-transformations
+                                  [(fn [{graph :graph :as g}]
+                                     (visual/render-to-file "tmp-dump" graph)
+                                     g)]})))))
