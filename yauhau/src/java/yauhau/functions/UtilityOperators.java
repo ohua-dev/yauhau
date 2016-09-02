@@ -41,10 +41,11 @@ public class UtilityOperators {
     }
 
     public static final class EmptyRequest {
+        private static final class Empty {}
         @defsfn
         @SuppressWarnings("unchecked")
-        public Request __emptyRequest (Object payload) {
-            return new Request(payload, new ConstDataSource());
+        public Request __emptyRequest () {
+            return new Request(new Empty(), new ConstDataSource());
         }
     }
 

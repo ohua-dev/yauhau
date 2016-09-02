@@ -169,7 +169,14 @@
 (def state-mk-select (partial state-mk-func "select")) ; TODO When select is fixed this function needs to be changed
 (def state-mk-fetch (partial state-mk-func 'yauhau.functions/fetch))
 (def state-mk-id (partial state-mk-func-unindexed 'yauhau.functions/identity))
-(def state-mk-empty-req (partial state-mk-func 'yauhau.functions/__empty-request))
+(defn state-mk-empty-req [ctx-arg]
+  (>>=
+    state-mk-name
+    (fn [empty-out]
+      (state-mk-func-unindexed
+        'yauhau.functions/__empty-request
+        [(vary-meta ctx-arg assoc :in-idx -1)]
+        empty-out))))
 (defn state-delete-fn [func]
   (mdo
     (unsafe-modify-graph (partial ir/drop-node func))
@@ -344,21 +351,14 @@
 
 (defn- gen-empty-for [amount in]
   (mdo
-    null-out <- state-mk-name
-    null-id <- state-gen-id
-    let null = (ir/->IRFunc
-                 null-id
-                 'yauhau.functions/__const-null
-                 [(vary-meta in assoc :in-idx -1)]
-                 null-out)
-    req-out <- state-mk-name
-    req <- (state-mk-empty-req [null-out] req-out)
+    req <- (state-mk-empty-req in)
+    let req-out = (.-return req)
     inserts <- (sequence-m
                   (repeatedly
                     amount
                     (fn [] (>>= state-mk-name (partial state-mk-fetch [req-out])))))
     let _ = (assert-coll-of-type IRFunc inserts (str (into [] inserts)))
-    (return (concat [null req] inserts))))
+    (return (cons req inserts))))
 
 
 (defn- get-fetches-concerned [curr-if]
