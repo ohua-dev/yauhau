@@ -32,7 +32,7 @@
                         ; they did not make a release to clojars yet so we include the jar here.
                         :resource-paths ["resources/muse-0.4.0.jar"]}}
 
-  :resource-paths ["resources/ohua-0.6.7-SNAPSHOT-standalone.jar"]
+  :resource-paths ["resources/ohua-0.6.8-SNAPSHOT-standalone.jar"]
 
   :source-paths ["yauhau/src/clojure"]
   :java-source-paths ["yauhau/src/java"]

@@ -31,7 +31,7 @@
 
 
 (defmacro ohua [& args]
-  `(o/ohua
+  `(o/<-ohua
      ~@args
      :compile-with-config {:df-transformations yauhau.ir-transform/transformations}))
 
@@ -97,7 +97,12 @@
 (def if-confs (for [seed [123456 234567 111111]
                     percentage [0.7 0.8 0.9 1]
                     inline [false true]]
-              (merge default-gen-conf {:#levels 10 :%ifs percentage :seed seed :inline_if inline})))
+              (merge default-gen-conf {:level_width 6 :#levels 15 :%ifs percentage :seed seed :inline_if inline})))
+
+(def if-delayed-confs (for [seed [123456 234567 111111]
+                            inline [false true]
+                            percentage [0 0.05 0.1 0.15 0.2]]
+                        (merge default-gen-conf {:%slow percentage :level_width 6 :#levels 15 :%ifs 0.7 :seed seed :inline_if inline})))
 
 (defn with-func []
   (let [confs (for [seed [123456 234567]
@@ -105,18 +110,27 @@
                 (merge default-gen-conf {:%funs percentage :seed seed}))]
   (run-prct-exp "yauhau" runner "func" "monad" confs)))
 
+(defn vanilla []
+  (run-yauhau-experiment "vanilla" "monad" {:lang "Ohua" :#graphs 100 :#levels 20 :seed 123456}))
+
 (defn with-if []
   ;(reset! CATCH_EXCEPTIONS true)
   (run-prct-exp "yauhau" runner "if" "monad" if-confs))
 
 (defn with-if-delayed []
-  (run-prct-exp "yauhau" runner "if-delayed" "monad" (map #(assoc % :+slow true) if-confs)))
+  (run-prct-exp "yauhau" runner "if-delayed" "monad" if-delayed-confs))
 
 (defn with-map []
   (let [confs (for [seed [123456 234567]
                     percentage [0.1, 0.15, 0.2, 0.25, 0.275, 0.3, 0.325, 0.375, 0.35]]
                 (merge default-gen-conf {:%maps percentage :seed seed}))]
     (run-prct-exp "yauhau" runner "map" "monad" confs)))
+
+(defn map-primer []
+  (let [confs (for [seed [123456 234567]
+                    percentage [0.1, 0.15, 0.2, 0.25, 0.275, 0.3, 0.325, 0.375, 0.35]]
+                (merge default-gen-conf {:%funs percentage :seed seed}))]
+    (run-prct-exp "yauhau" runner "map-primer" "monad" confs)))
 
 (defn exec-all []
   (with-map)

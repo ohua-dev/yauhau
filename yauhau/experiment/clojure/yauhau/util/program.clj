@@ -31,14 +31,8 @@
 (def CATCH_EXCEPTIONS (atom false))
 
 (defmacro get-data [& args]
-  (if (and (< (count args) 3)
-           (not (symbol? (second (reverse args)))))
-    `(yauhau.functions/fetch
-       (yauhau.functions/read-request ~@args))
-    `(yauhau.functions/fetch
-       (yauhau.functions/read-request ~@args))
-    )
-  )
+  `(yauhau.functions/fetch
+     (yauhau.functions/read-request ~@args)))
 
 (defmacro write-data [& args]
   (if (and (< (count args) 3)
@@ -50,23 +44,12 @@
     )
   )
 
-(defmacro compute [& args]
-  (if (< (count args) 2)
-    `(yauhau.functions/compute ~@args)
-    `(yauhau.functions/compute ~@args)
-    )
-  )
+(defmacro compute [& args] `(yauhau.functions/compute ~@args))
 
 
 (defmacro slow-get-data [& args]
-  (if (and (< (count args) 3)
-           (not (symbol? (second (reverse args)))))
-    `(yauhau.functions/fetch
-       (yauhau.functions/slow-read-request (into-array Object [~@args])))
-    `(yauhau.functions/fetch
-       (yauhau.functions/slow-read-request ~@args))
-    )
-  )
+  `(yauhau.functions/fetch
+     (yauhau.functions/slow-read-request ~@args)))
 
 
 (def level-name-regex #".*\_level([0-9]*).*")
@@ -182,8 +165,10 @@
         (g :%ifs "--percentageifs")
         (g :#graphs "-n")
         (g :lang "-L")
+        (g :level_width "--levelwidth")
         (g :#levels "-l")
         (g :seed "-s")
+        (g :%slow "--percentageslow")
         (g :%maps "--percentagemaps")
         (g :%funs "--percentagefuns")
         (g :%sources "--percentagesources")

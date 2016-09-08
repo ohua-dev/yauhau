@@ -4,7 +4,8 @@
             [loom.attr :refer [add-attr]]
             [monads.core :refer [mdo return modify >>= get-state put-state]]
             [monads.state :as st]
-            [clojure.set :as setlib]))
+            [clojure.set :as setlib]
+            [yauhau.util.loom :refer [ir-to-loom-graph]]))
 
 
 (defn is-algo? [ctx] (= 'com.ohua.lang/algo-in (:type %)))
@@ -21,12 +22,6 @@
 (defn mapM
   "Map a computation onto seqs and then monad thread the results in order (sequence-m)"
   [comp & seqs] (sequence-m (apply map comp seqs)))
-
-
-(defn ir-to-loom-graph [ir]
-  (apply add-edges
-    (apply add-nodes (digraph) ir)
-    (mapcat (fn [node] (map (fn [succ] [node succ]) (ir/successors node))) ir)))
 
 
 (defn reduce-graph [f ir-graph node]
