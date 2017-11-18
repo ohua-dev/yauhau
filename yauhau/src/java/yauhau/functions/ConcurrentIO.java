@@ -6,7 +6,7 @@
 
 package yauhau.functions;
 
-import com.ohua.engine.flowgraph.elements.operator.Control;
+import static com.ohua.engine.flowgraph.elements.operator.DataflowFunction.Control;
 import com.ohua.engine.flowgraph.elements.operator.DataflowFunction;
 import com.ohua.engine.flowgraph.elements.operator.OutputMatch;
 import com.ohua.lang.defsfn;

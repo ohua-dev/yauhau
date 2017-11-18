@@ -52,8 +52,11 @@
       (conj __fetches __accum __size __one-to-n __smap __dispatch __merge __unbatch))
     [accum-fetch-fn]))
 
-(defn rewrite [ir]
-  (ir/update-nodes-where
-    is-accum?
-    rewrite-accum-fn
-    ir))
+(defn rewrite [{ir :graph :as g}]
+  (assoc 
+    g 
+    :graph
+    (ir/update-nodes-where
+      is-accum?
+      rewrite-accum-fn
+      ir)))

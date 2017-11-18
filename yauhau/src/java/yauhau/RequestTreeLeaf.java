@@ -6,9 +6,7 @@
 
 package yauhau;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -17,27 +15,30 @@ import java.util.stream.StreamSupport;
  */
 public final class RequestTreeLeaf extends RequestTree {
     private final Request request;
+    private final List<Request> reqAsList;
 
     public RequestTreeLeaf(Request request) {
         this.request = request;
+        this.reqAsList = Arrays.asList(request);
     }
 
     @Override
     public Iterable<Request> getRequests() {
-        List<Request> l = new ArrayList<>(1);
-        l.add(request);
-        return l;
+        return reqAsList;
     }
 
     @Override
     public Stream<Request> getRequestsStream() {
-        return StreamSupport.stream(getRequests().spliterator(), false);
+        return reqAsList.stream();
     }
 
     @Override
-    public Iterable<Object> buildResult(Map<Request, Object> responses) {
-        List<Object> l = new ArrayList<>(1);
-        l.add(responses.get(request));
-        return l;
+    public Object buildResult(Map<Request, Object> responses) {
+        return Arrays.asList(responses.get(request));
+    }
+
+    @Override
+    public int height() {
+        return 1;
     }
 }

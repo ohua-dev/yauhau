@@ -342,52 +342,54 @@
   [ir-graph]
   ir-graph)
 
-
 (defn batch-rewrite
   "docstring"
-  [{ir-graph :graph :as df-ir}]
-  (loop [position (ir/first-position ir-graph)
-         graph ir-graph
-         new-id (inc (get-largest-id ir-graph))]
-    (let [[{visited :visited
-            satisfied :dependencies
-            :as new-position} fetch-nodes] (find-next-fetches position)]
-      (if (empty? fetch-nodes)
-        (do
-          (when (not-every? visited graph)
-            (let [unvisited (remove visited ir-graph)
-                  uncreated (set (mapcat ir/get-return-vars unvisited))
-                  missing (remove #(or (satisfied %) (uncreated %)) (mapcat :args unvisited))
-                  producers (apply hash-map (mapcat #(mapcat vector (ir/get-return-vars %) (repeat %)) ir-graph))]
-              (println "Unvisited")
-              (pprint/print-table unvisited)
-              (println "Missing data")
-              (println missing)
-              (println "Missing producers")
-              (visual/render-to-file "cycle" unvisited)
-              (pprint/print-table (map (fn [m] (let [p (producers m)] {:missing m :id (:id p) :name (:name p)})) missing))
-              (System/exit 1)))
-          (assoc df-ir :graph
-                       (if (vector? graph)
-                         graph
-                         (into [] graph))))
-        (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
-              ; TODO we might have to insert identity operators after the outputs too
-              ; since the fetch operator might have destructured return
-              outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
-              accum (mk-func-and-index new-id 'yauhau.functions/__accum-fetch inputs outputs)
-              fetches-removed (remove (set fetch-nodes) graph)
-              new-graph (into [] (conj fetches-removed accum))
-              new-dependencies (setlib/union (.-dependencies new-position) (set outputs))
-              new-visited (conj visited accum)]
-          (recur
-            (ir/->IRGraphPosition
+  [{ir-graph :graph env-args :env-args :as df-ir}]
+  (let [pos0 (ir/->IRGraphPosition ir-graph (set (filter #(every? env-args (:args %)) ir-graph)) #{} env-args)]
+    (loop [position (assoc pos0 :dependencies (:env-args df-ir))
+          graph ir-graph
+          new-id (inc (get-largest-id ir-graph))]
+      (let [[{visited :visited
+              satisfied :dependencies
+              :as new-position} fetch-nodes] (find-next-fetches position)]
+        (if (empty? fetch-nodes)
+          (do
+            (when (not-every? visited graph)
+              (let [unvisited (remove visited ir-graph)
+                    uncreated (set (mapcat ir/get-return-vars unvisited))
+                    missing (remove #(or (satisfied %) (uncreated %)) (mapcat :args unvisited))
+                    producers (apply hash-map (mapcat #(mapcat vector (ir/get-return-vars %) (repeat %)) ir-graph))]
+                (println "Visited")
+                (pprint/print-table visited)
+                (println "Unvisited")
+                (pprint/print-table unvisited)
+                (println "Missing data")
+                (println missing)
+                (println "Missing producers")
+                (visual/render-to-file "cycle" unvisited)
+                (pprint/print-table (map (fn [m] (let [p (producers m)] {:missing m :id (:id p) :name (:name p)})) missing))
+                (System/exit 1)))
+            (assoc df-ir :graph
+                        (if (vector? graph)
+                          graph
+                          (into [] graph))))
+          (let [inputs (ir/reindex-stuff :in-idx (mapcat :args fetch-nodes))
+                ; TODO we might have to insert identity operators after the outputs too
+                ; since the fetch operator might have destructured return
+                outputs (ir/reindex-stuff :out-idx (mapcat ir/get-return-vars fetch-nodes))
+                accum (mk-func-and-index new-id 'yauhau.functions/__accum-fetch inputs outputs)
+                fetches-removed (remove (set fetch-nodes) graph)
+                new-graph (into [] (conj fetches-removed accum))
+                new-dependencies (setlib/union (.-dependencies new-position) (set outputs))
+                new-visited (conj visited accum)]
+            (recur
+              (ir/->IRGraphPosition
+                new-graph
+                (ir/next-satisfied new-graph new-dependencies new-visited)
+                new-visited
+                new-dependencies)
               new-graph
-              (ir/next-satisfied new-graph new-dependencies new-visited)
-              new-visited
-              new-dependencies)
-            new-graph
-            (inc new-id)))))))
+              (inc new-id))))))))
 
 
 (defn- gen-empty-for [amount in]
@@ -644,7 +646,7 @@
            trans-map)))
 
 
-(defn- unwind-context- [trigger-map {ir-graph :graph label-map :ctxt-map}]
+(defn- unwind-context- [trigger-map {ir-graph :graph label-map :ctxt-map :as df-ir}]
   (let [name-gen (mk-name-gen-func ir-graph)
         id-gen (iterate inc (inc (get-largest-id ir-graph)))
 
@@ -705,7 +707,7 @@
            :label-map label-map
            :name-gen  name-gen
            :id-gen    id-gen})]
-    (ir/->IR new-graph new-labels)))
+    (assoc df-ir :graph new-graph :label-map new-labels)))
 
 
 (def context-rewrite-with unwind-context-)
@@ -741,9 +743,21 @@
     (fn [graph] (ir/validate graph (str "after " name)))
     (log-transformation-at name)))
 
+(defn is-env? [arg]
+  (and (seq? arg)
+       (let [[fn_ empty-vec] arg]
+         (and (= 'fn fn_)
+              (= [] empty-vec)))))
+
+(defn assoc-env-args [{graph :graph :as g}]
+  (let [env-args (set (mapcat #(filter is-env? (:args %)) graph))]
+    (assoc g :env-args env-args)))
+
 
 (def transformations
-  [(fn [{graph :graph :as g}]
+  [
+   assoc-env-args
+   (fn [{graph :graph :as g}]
      (l/printline "Before transformations")
      (visual/render-to-file "before-trans" graph @highlight-graph-parts)
      (l/log-graph graph)
@@ -756,11 +770,12 @@
   (validate-and-log "context-rewrite")
   batch-rewrite
   (validate-and-log "batch-rewrite")
-  (fn [{graph :graph :as g}]
-    (l/printline "Applied transformations")
-    (visual/render-to-file "after-trans" graph @highlight-graph-parts)
-    (l/log-graph graph)
-    g)])
+  ; (fn [{graph :graph :as g}]
+  ;   (l/printline "Applied transformations")
+  ;   (visual/render-to-file "after-trans" graph @highlight-graph-parts)
+  ;   (l/log-graph graph)
+  ;   g)
+  ])
 
 
 (def full-transform (apply comp (reverse transformations)))

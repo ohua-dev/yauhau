@@ -35,4 +35,9 @@ public final class RequestTreeMultiLeaf extends RequestTree {
     public Iterable<Object> buildResult(Map<Request, Object> responses) {
         return getRequestsStream().map(responses::get).collect(Collectors.toList());
     }
+
+    @Override
+    public int height() {
+        return 1;
+    }
 }
