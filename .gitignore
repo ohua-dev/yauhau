@@ -19,3 +19,4 @@ pom.xml.asc
 /yauhau/experiment/clojure/generated/
 /test/
 /ir-graphs/
+/.stack-work/
