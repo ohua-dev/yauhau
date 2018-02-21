@@ -1,0 +1,72 @@
+name: yauhau-transform
+version: '0.1.0.0'
+synopsis: Initial project template from stack
+description: Please see README.md
+category: Development
+author: JustusAdam
+maintainer: dev@justus.science
+copyright: ! 'Copyright: (c) 2016 - 2018 Justus Adam'
+license: BSD3
+github: JustusAdam/haskell
+default-extensions:
+- OverloadedStrings
+- MultiParamTypeClasses
+- FunctionalDependencies
+- TypeFamilies
+- GADTs
+- FlexibleContexts
+- FlexibleInstances
+- TypeSynonymInstances
+- LambdaCase
+- TupleSections
+- BangPatterns
+- ExplicitForAll
+- ScopedTypeVariables
+- DefaultSignatures
+- DeriveFunctor
+- DeriveFoldable
+- DeriveTraversable
+- DeriveGeneric
+- PatternSynonyms
+library:
+  source-dirs: src
+  exposed-modules:
+  - Ohua.Transform.Yauhau
+  other-modules: []
+  dependencies:
+  - base >=4.7 && <5
+  - mtl
+  - microlens
+  - containers
+  - unordered-containers
+  - hashable
+  - recursion-schemes
+  - ohua-core
+  - comonad
+  - uniplate
+executables:
+  yauhau-transform-exe:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - base
+    - yauhau-transform
+tests:
+  yauhau-transform-test:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - base
+    - hspec
+    - fgl
+    - ohua-core
+    - containers
+    - yauhau-transform

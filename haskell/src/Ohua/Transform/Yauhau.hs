@@ -6,10 +6,11 @@ import           Control.Monad.Reader              as R
 import           Control.Monad.Writer
 import           Data.Foldable
 import           Data.Functor.Foldable
-import           Data.Generics.Uniplate.Operations hiding (cata, para)
+import           Data.Generics.Uniplate.Operations hiding (para)
 import qualified Data.HashMap.Strict               as HM
 import qualified Data.HashSet                      as HS
 import           Ohua.ALang.Lang
+import           Ohua.ALang.Passes                 (normalize)
 import qualified Ohua.ALang.Refs                   as Refs
 import           Ohua.Monad
 import           Ohua.Types
@@ -41,14 +42,19 @@ type ExprBuilder = Expression -> Expression
 
 
 splitExp :: (MonadGenBnd m, MonadError Error m)
-         => FnId -> Expression -> m ( (Binding -> ExprBuilder)
-                                    , (Binding -> Binding -> ExprBuilder)
-                                    , (Binding -> Expression)
-                                    )
-splitExp fnId expr = do
-  ((buildSec1LastLet, buildSec2, buildSec3), Mutator buildSec1) <- runWriterT $ flip runReaderT mempty $ para go expr
-  pure ( \bnd -> buildSec1 . buildSec1LastLet bnd
+         => FnId -> HS.HashSet Binding -> Expression
+         -> m ( Expression
+              , Expression
+              , (Binding -> Binding -> Expression -> ExprBuilder)
+              , [Binding]
+              , (Binding -> Binding -> Expression)
+              )
+splitExp fnId predefinedBnds expr = do
+  ((buildSec1LastLet, e, buildSec2, vars, buildSec3), Mutator buildSec1) <- runWriterT $ flip runReaderT predefinedBnds $ para go expr
+  pure ( buildSec1 buildSec1LastLet
+       , e
        , buildSec2
+       , vars
        , buildSec3
        )
   where
@@ -56,9 +62,8 @@ splitExp fnId expr = do
       | sfHasId fnId val = do
           combInputs <- generateBinding
           combFreeBnd <- generateBinding
-          allCombBnd <- generateBinding
 
-          (rewordedExpr, bnds) <- rewordExpression val
+          (rewordedExpr', bnds) <- rewordExpression val
 
           resultBnd <- generateBinding
           defined <- ask
@@ -70,19 +75,18 @@ splitExp fnId expr = do
 
           combFreeBnds1 <- generateBinding
           inputsBnd <- generateBinding
-          combFreeBnds2 <- generateBinding
-          resultBnd2 <- generateBinding
 
           pure
-            ( \allCombBnd -> Let (Direct allCombBnd) $ mkTupSf `Apply` Var (Local combInputs) `Apply` Var (Local combFreeBnd)
-            , \midSectionInput midSectionOut ->
+            ( mkTupSf `Apply` Var (Local combInputs) `Apply` Var (Local combFreeBnd)
+            , rewordedExpr'
+            , \midSectionInput midSectionOut rewordedExpression ->
                 Let (Destructure [inputsBnd, combFreeBnds1]) (idSf `Apply` Var (Local midSectionInput))
                 . Let (Destructure $ map snd bnds) (idSf `Apply` Var (Local inputsBnd))
-                . Let (Direct resultBnd) rewordedExpr
+                . Let (Direct resultBnd) rewordedExpression
                 . Let (Direct midSectionOut) (idSf `Apply` Var (Local resultBnd) `Apply` Var (Local combFreeBnds1))
-            , \lastSectionInput ->
-                Let (Destructure [resultBnd2, combFreeBnds2]) (Var (Local lastSectionInput))
-                $ Let assign (idSf `Apply` Var (Local resultBnd2))
+            , newCarryoverFreeVars
+            , \resultBnd2 combFreeBnds2 ->
+                Let assign (idSf `Apply` Var (Local resultBnd2))
                 $ Let (Destructure newCarryoverFreeVars) (idSf `Apply` Var (Local combFreeBnds2))
                 $ let lookupTable = HM.fromList $ zip carryoverFreeVars newCarryoverFreeVars
                   in cata (\case VarF (Local b) | Just b' <- HM.lookup b lookupTable -> Var (Local b'); other -> embed other) body
@@ -91,13 +95,60 @@ splitExp fnId expr = do
           tellMut $ Let assign val
           R.local (HS.union (HS.fromList $ flattenAssign assign)) contBody
         where
-          (sf, combExpr) = renameSf val
+          (_, combExpr) = renameSf val
           usedBindings = HS.fromList [ b | Var (Local b) <- universe body ]
 
     go _ = error "expected let"
 
-tellMut :: MonadWriter (Mutator a) m => (a -> a) -> m ()
-tellMut = tell . Mutator
+
+liftSmap :: MonadOhua env m => Expression -> m Expression
+liftSmap = cata $ \case
+  LetF assign var rest -> var >>= \case
+    Apply (Apply (Var (Sf sf _)) (Lambda lassign lbody)) someArg
+      | sf == Refs.smap -> do
+          (lam, cont) <- go assign lassign lbody
+          r' <- rest
+          normalize $ lam someArg $ cont r'
+    v -> Let assign v <$> rest
+  e -> embed <$> sequence e
+
+  where
+    go finalAssign lassign lbody
+      | Just i <- findFetchId lbody = do
+          (before, _, _, _, buildEnd) <- splitExp i (HS.fromList $ flattenAssign lassign) lbody
+          vals <- generateBindingWith "fetches"
+          envs <- generateBindingWith "envs"
+          endEnv <- generateBindingWith "env"
+          endVar <- generateBindingWith "fetch"
+
+          let newLAssign = Destructure [endVar, endEnv]
+          let lamBody = buildEnd endVar endEnv
+
+          (lam, cont) <- go finalAssign newLAssign lamBody
+
+          let newE :: ExprBuilder
+              newE e =
+                lam (zipSF `Apply` (fetchSF `Apply` Var (Local vals)) `Apply` (Var (Local envs)))
+                $ cont e
+          pure
+            ( \arg -> Let (Destructure [vals, envs]) (unzipSF `Apply` (smapSF `Apply` Lambda lassign before `Apply` arg))
+            , newE
+            )
+      | otherwise = pure (Let finalAssign . Apply (Lambda lassign lbody), id)
+
+
+findFetchId :: Expression -> Maybe FnId
+findFetchId e = case [ i | Var (Sf ty i) <- universe e, ty == Refs.smap ] of
+                  Just x:_  -> Just x
+                  Nothing:_ -> error "found fetch with no id"
+                  _         -> Nothing
+
+
+fetchSF, zipSF, unzipSF, smapSF :: Expression
+fetchSF = Var $ Sf "yauhau/fetch" Nothing
+zipSF = Var $ Sf "yauhau/zip" Nothing
+unzipSF = Var $ Sf "yauhau/unzip" Nothing
+smapSF = Var $ Sf Refs.smap Nothing
 
 
 mkTupSf, idSf :: Expression
