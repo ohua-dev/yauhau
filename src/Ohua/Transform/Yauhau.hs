@@ -1,26 +1,28 @@
 module Ohua.Transform.Yauhau where
 
 
-import           Control.Arrow
+import           Control.Category
+import           Control.Comonad
+import           Control.Comonad.Cofree
 import           Control.Comonad.Env               (env, runEnv)
 import           Control.Monad.Reader              as R
-import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.Foldable
+import           Data.Functor.Contravariant        (Predicate (..))
 import           Data.Functor.Foldable
 import           Data.Generics.Uniplate.Operations hiding (contexts, para)
-import           Data.Graph.Inductive.Graph
-import           Data.Graph.Inductive.PatriciaTree
 import qualified Data.HashMap.Strict               as HM
 import qualified Data.HashSet                      as HS
-import qualified Data.IntSet                       as IntSet
-import           Data.Maybe
+import           Lens.Micro
+import           Lens.Micro.Mtl                    hiding (assign)
 import           Ohua.ALang.Lang
 import           Ohua.ALang.Passes                 (normalize)
 import qualified Ohua.ALang.Refs                   as Refs
 import           Ohua.Monad
 import           Ohua.Types
 import           Ohua.Util
+import           Ohua.Util.Str                     (showS)
+import           Prelude                           hiding (id, (.))
 
 
 mkTupRef :: QualifiedBinding
@@ -28,7 +30,7 @@ mkTupRef = "ohua.lang/mkTup"
 
 
 findFreeVars :: Expression -> HS.HashSet Binding
-findFreeVars = flip runReader mempty . cata go
+findFreeVars = ($ mempty) . cata go
   where
     go (VarF (Local b)) = do
       isDefined <- R.asks (HS.member b)
@@ -150,20 +152,27 @@ findFetchId e = case [ i | Var (Sf ty i) <- universe e, ty == Refs.smap ] of
                   _         -> Nothing
 
 
-fetchName :: QualifiedBinding
-fetchName = "yauhau/fetch"
+fetchName, accumName, zipName, unzipName :: QualifiedBinding
 
+fetchName = "yauhau/fetch"
+accumName = "yauhau/accum"
+zipName =  "yauhau/zip"
+unzipName = "yauhau/unzip"
 
 fetchSF, zipSF, unzipSF, smapSF :: Expression
 fetchSF = Var $ Sf fetchName Nothing
-zipSF = Var $ Sf "yauhau/zip" Nothing
-unzipSF = Var $ Sf "yauhau/unzip" Nothing
+zipSF = Var $ Sf zipName Nothing
+unzipSF = Var $ Sf unzipName Nothing
 smapSF = Var $ Sf Refs.smap Nothing
 
 
 mkTupSf, idSf :: Expression
 mkTupSf = Var (Sf mkTupRef Nothing)
 idSf = Var (Sf Refs.id Nothing)
+
+
+equals :: Eq a => a -> Predicate a
+equals = Predicate . (==)
 
 
 sfHasId :: FnId -> Expression -> Bool
@@ -194,113 +203,98 @@ rewordExpression = runWriterT . para go
                                      pure $ Local b'
                                    other -> pure other)
       VarF v -> pure $ Var v
-      _ -> throwError $ "Expected var or apply"
+      _ -> throwErrorS $ "Expected var or apply"
 
 
--- The yauhau node label type
-data YNL
-  = SfL QualifiedBinding (Maybe FnId)
-  | EnvL HostExpr
-  | LambdaL Assignment Expression
-
--- A yauhau edge label
-type YEL = Maybe Binding
-
-type DepGr = Gr QualifiedBinding ()
-
-
-buildDependencyGraph :: DynGraph gr => Expression -> gr QualifiedBinding ()
-buildDependencyGraph = flip execState empty . flip runReaderT mempty . cata go
+groupFns :: MonadError Error m => Predicate QualifiedBinding -> Expression -> m Expression
+groupFns p'@(Predicate p) = flip runReaderT (id, id, id, HS.empty) . go
   where
-    askSource b = asks $ join . HM.lookup b . fst
-    askDeps = asks snd
-    addDeps = local . second . maybe id (:)
-    registerSources bnds src = local $ first $ \hm -> foldr' (\k -> HM.insertWith (error "duplicate source") k src) hm bnds
+    go (Let assign val rest) = do
+      ((sf, _), deps) <- decomp val
+      sat <- areSatisfied deps
+      let push | sat && p sf = pushTarget assign
+               | sat = pushSat
+               | otherwise = pushUnsat assign
+      push (Let assign val) $ go rest
+    go end@(Var (Local _)) = do
+      (buildSat, buildTarget, buildUnsat, deps) <- ask
 
-    go (VarF v) =
-      case v of
-        Local b -> askSource b
-        Sf _ Nothing -> error "No id"
-        Sf sf (Just (FnId sfid)) -> do
-          deps <- askDeps
-          modify $ insNode (sfid, sf)
-          modify $ insEdges $ map (sfid, , ()) deps
-          pure $ Just sfid
-        _ -> pure Nothing
-    go (ApplyF fn val) = do
-      valDeps <- val
-      addDeps valDeps fn
-    go (LetF assign val body) = do
-      source <- val
-      registerSources (flattenAssign assign) source body
-    go (LambdaF _ _) = pure Nothing
+      lift $ fmap (buildSat . buildTarget) $ (if HS.null deps then pure else groupFns p') (buildUnsat end)
+    go e = throwErrorS $ "Exprected let or var, got " <> showS e
 
+    areSatisfied deps = asks ((\hs -> all (not . flip HS.member hs) deps) . view _4)
+    appendLetOn l f = local (l %~ (. f))
+    registerUnsatDeps assign = local (_4 %~ flip (foldr' HS.insert) (flattenAssign assign))
+    pushSat = appendLetOn _1
+    pushTarget assign mkLet = registerUnsatDeps assign . appendLetOn _2 mkLet
+    pushUnsat assign mkLet = registerUnsatDeps assign . appendLetOn _3 mkLet
 
-focusGraph :: (Monoid b, DynGraph gr) => (LNode a -> Bool) -> gr a b -> gr a b
-focusGraph p gr = foldl' go gr $ map fst $ filter p $ labNodes gr
-  where
-    go gr' n = insEdges [ (source, target, a `mappend` b)
-                        | (source, a) <- lpre' ctx
-                        , (target, b) <- lsuc' ctx
-                        ]
-                        gr'
+    decomp = runWriterT . para go0
       where
-        ctx = context gr' n
+        go0 (ApplyF (_, fn) (Var val, _)) = do
+          case val of
+            Local b -> tell [b]
+            _       -> pure ()
+          fn
+        go0 (VarF (Sf sf sfid)) = pure (sf, sfid)
+        go0 e = throwErrorS $ "Expected apply or var, got " <> showS (embed $ fmap fst e)
 
-fetchDependencyGraph :: (DynGraph gr, Monoid b) => gr QualifiedBinding b -> gr QualifiedBinding b
-fetchDependencyGraph = focusGraph (\(_, sf) -> sf == fetchName)
 
-
-contexts :: Graph gr => gr a b -> [Context a b]
-contexts = ufold (:) []
-
-
-calculateFetchRounds :: Graph gr => gr a b -> [IntSet.IntSet]
-calculateFetchRounds gr = unfold go initials
+-- | INVARIANT: The calls that are combined must each have a single input and a single return
+combineTo :: forall m . MonadError Error m => Predicate QualifiedBinding -> QualifiedBinding -> Expression -> m Expression
+combineTo p'@(Predicate p) f = histo go
   where
-    initials = IntSet.fromList $ map node' $ filter (null . suc') $ contexts gr
-    go vertices | IntSet.null new = Nil
-                | otherwise = Cons new new
+    recurse = combineTo p' f
+    rebuild = ana unwrap
+    go :: AExprF Binding ResolvedSymbol (Cofree (AExprF Binding ResolvedSymbol) (m Expression)) -> m Expression
+    go (LetF assign1
+         valC
+         (_ :< LetF assign2
+                    (_ :< ApplyF (_ :< VarF (Sf f' _)) arg)
+                    rest))
+      | isAccum acc && p f' =
+        case (assign1, assign2) of
+          (Destructure bnds, Direct b) -> recurse $ Let (Destructure (bnds ++ [b])) (val `Apply` rebuild arg) $ rebuild rest
+          _ -> throwErrorS "Invariant broken. Assigns for combine 1st case."
       where
-        new = IntSet.fromList $ IntSet.toList vertices >>= suc gr
+        acc = extractSf val
+        val = rebuild valC
 
--- TODO improve:
-  -- there's a case where this transformation fails
-  -- This inserts the accumulator after the *last* expression that produces a value
-  -- a participating fetch depends on. However the graph we calculate before
-  -- does not respect the sequentiality of expressions.
-  -- it may therefore be possible that the result of a fetch is used before the last
-  -- dependency for the accumulator is produced.
-  -- This is because we suse the original expression, but we must in some cases reorder it.
-  -- I opt to ignore this problem for now.
-transform :: MonadGenBnd m => Expression -> m Expression
-transform e = foldl' rewriteRound e rounds
-  where
-    gr = buildDependencyGraph e
-    fetchGr = fetchDependencyGraph gr
-    rounds = calculateFetchRounds fetchGr
+    go (LetF assign1
+         (_ :< ApplyF (_ :< VarF (Sf f0 sfid)) arg1)
+         (_ :< LetF assign2
+                    (_ :< ApplyF (_ :< VarF (Sf f1 _)) arg2)
+                    rest))
+      | p f0 && p f1 =
+          case (assign1, assign2) of
+            (Direct bnd0, Direct b) ->
+              recurse $ Let (Destructure [bnd0, b]) (Var (Sf f sfid) `Apply` rebuild arg1 `Apply` rebuild arg2) $ rebuild rest
+            _ -> throwErrorS "Invariant broken. Assigns for combine 2nd case."
 
-    insertAcumExpr round rest = do
-      
-      Let rest
-      where 
+    go (LetF assign val body) = Let assign (rebuild val) <$> extract body
+    go (VarF v) = pure $ Var v
+    go e = throwErrorS $ "Expected let or var, got " <> showS (embed $ fmap rebuild e)
 
-    rewriteRound e' round = flip runReader mempty $ flip runStateT False $ para go e
-      where
-        generic = fmap embed . traverse snd
-        deps = IntSet.fromList $ IntSet.toList round >>= pre gr
-        go e''@(LetF assign (Apply (Sf sf (Just i)) arg, val) (_, body)) = do
-          isDep <- asks $ IntSet.member i
+    isAccum = (== f)
 
-          if isDep
-            then local (IntSet.delete i) $ do
-              shouldInsert <- asks IntSet.null
-              if shouldInsert
-                then do
-                  v <- val
-                  b <- body
-                  insertAcumExpr round =<< Let assign v b
-                else Let assign <$> val <*> body
-            else generic e''
-        go e'' = generic e''
+extractSf :: Expression -> QualifiedBinding
+extractSf = cata $ \case
+  ApplyF fn _ -> fn
+  VarF (Sf sf _) -> sf
+  e -> error $ "Exprected apply or var, got " <> showS e
 
+
+normalizeAssigns :: (Monad m, MonadGenBnd m) => Predicate QualifiedBinding -> Expression -> m Expression
+normalizeAssigns (Predicate p) = cata $ \case
+  LetF assign@(Destructure bnds) val body -> do
+    val' <- val
+    if p $ extractSf val'
+       then do
+         bnd <- generateBinding
+         Let (Direct bnd) val' . Let (Destructure bnds) (Var (Sf Refs.id Nothing) `Apply` Var (Local bnd)) <$> body
+       else Let assign val' <$> body
+  other -> embed <$> sequence other
+
+combineIO :: (MonadError Error m, MonadGenBnd m) => Expression -> m Expression
+combineIO = normalizeAssigns isFetch >=> groupFns isFetch >=> combineTo isFetch accumName
+  where isFetch = equals fetchName
