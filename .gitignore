@@ -20,3 +20,5 @@ pom.xml.asc
 /test/
 /ir-graphs/
 /.stack-work/
+dist/
+.cabal-sandbox/

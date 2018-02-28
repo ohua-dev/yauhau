@@ -1,0 +1,15 @@
+name: yauhau-jvm
+author: Justus Adam
+version: 0.1.0.0
+cabal-version: >= 1.2
+build-type: Simple
+
+library
+  exposed-modules: Yauhau
+  hs-source-dirs: src/eta
+  build-depends: base
+               , yauhau-transform
+               , ohua-jvm-integration
+               , data-default-class
+               , ohua-core
+                

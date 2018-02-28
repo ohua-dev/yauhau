@@ -298,3 +298,5 @@ normalizeAssigns (Predicate p) = cata $ \case
 combineIO :: (MonadError Error m, MonadGenBnd m) => Expression -> m Expression
 combineIO = normalizeAssigns isFetch >=> groupFns isFetch >=> combineTo isFetch accumName
   where isFetch = equals fetchName
+
+
