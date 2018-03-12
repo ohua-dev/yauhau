@@ -2,7 +2,7 @@
   (:require [ohua.lang]
             [ohua.util :refer [+option]]))
 
-(defn yauhau-fn [code option] (ohua.lang/ohua-fn-with yauhau.Compiler/compileAndSpliceEnv code option))
+(defn yauhau-fn [code option] (ohua.lang/ohua-fn-with #(yauhau.Compiler/compileAndSpliceEnv %1 %2 %3) code option))
 
 (defmacro yauhau
   "See `ohua-fn-with`."

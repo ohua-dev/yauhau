@@ -1,3 +1,4 @@
+#! stack runhaskell
 {-
 Uses the `etlas deps` command to retrieve the list of dependency jars for
 Finally it reads the project.clj template and pastes the extracted jars as resources into the
