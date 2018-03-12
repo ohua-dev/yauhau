@@ -48,7 +48,8 @@ findFreeVars = ($ mempty) . cata go
 
 type ExprBuilder = Expression -> Expression
 
-
+-- | Adapted to work on only one input functions, For a version that combines its inputs see
+-- this funciton in f15868ae87692a8304573fe87f268b319c787150
 splitExp :: (MonadGenBnd m, MonadError Error m)
          => FnId -> HS.HashSet Binding -> Expression
          -> m ( Expression
@@ -68,28 +69,24 @@ splitExp fnId predefinedBnds expr = do
   where
     go (LetF assign (val, _) (body, contBody))
       | sfHasId fnId val = do
-          combInputs <- generateBinding
           combFreeBnd <- generateBinding
 
-          (rewordedExpr', bnds) <- rewordExpression val
+          (rewordedExpr', [(bnd, inputsBnd)]) <- rewordExpression val
 
           resultBnd <- generateBinding
           defined <- ask
           let carryoverFreeVars = HS.toList $ HS.intersection defined usedBindings
-          tellMut $ Let (Direct combInputs) combExpr
           tellMut $ Let (Direct combFreeBnd) $ foldl' Apply mkTupSf (map (Var . Local) carryoverFreeVars)
 
           newCarryoverFreeVars <- traverse generateBindingWith carryoverFreeVars
 
           combFreeBnds1 <- generateBinding
-          inputsBnd <- generateBinding
 
           pure
-            ( mkTupSf `Apply` Var (Local combInputs) `Apply` Var (Local combFreeBnd)
+            ( mkTupSf `Apply` Var (Local bnd) `Apply` Var (Local combFreeBnd)
             , rewordedExpr'
             , \midSectionInput midSectionOut rewordedExpression ->
                 Let (Destructure [inputsBnd, combFreeBnds1]) (idSf `Apply` Var (Local midSectionInput))
-                . Let (Destructure $ map snd bnds) (idSf `Apply` Var (Local inputsBnd))
                 . Let (Direct resultBnd) rewordedExpression
                 . Let (Direct midSectionOut) (idSf `Apply` Var (Local resultBnd) `Apply` Var (Local combFreeBnds1))
             , newCarryoverFreeVars
@@ -97,7 +94,8 @@ splitExp fnId predefinedBnds expr = do
                 Let assign (idSf `Apply` Var (Local resultBnd2))
                 $ Let (Destructure newCarryoverFreeVars) (idSf `Apply` Var (Local combFreeBnds2))
                 $ let lookupTable = HM.fromList $ zip carryoverFreeVars newCarryoverFreeVars
-                  in cata (\case VarF (Local b) | Just b' <- HM.lookup b lookupTable -> Var (Local b'); other -> embed other) body
+                  in cata (\case VarF (Local b) | Just b' <- HM.lookup b lookupTable -> Var (Local b');
+                                 other -> embed other) body
             )
       | otherwise = do
           tellMut $ Let assign val
@@ -136,39 +134,48 @@ liftSmap = cata $ \case
 
           let newE :: ExprBuilder
               newE e =
-                lam (zipSF `Apply` (fetchSF `Apply` Var (Local vals)) `Apply` (Var (Local envs)))
+                lam (zipSF `Apply` (unTreeSF `Apply`
+                                    (fetchSF `Apply`
+                                     (mkTreeSF `Apply`
+                                      Var (Local vals))))
+                      `Apply` (Var (Local envs)))
                 $ cont e
           pure
             ( \arg -> Let (Destructure [vals, envs]) (unzipSF `Apply` (smapSF `Apply` Lambda lassign before `Apply` arg))
             , newE
             )
-      | otherwise = pure (Let finalAssign . Apply (Lambda lassign lbody), id)
+      | otherwise = pure (Let finalAssign . Apply (smapSF `Apply`  Lambda lassign lbody), id)
 
 
 findFetchId :: Expression -> Maybe FnId
-findFetchId e = case [ i | Var (Sf ty i) <- universe e, ty == Refs.smap ] of
+findFetchId e = case [ i | Var (Sf ty i) <- universe e, ty == fetchName ] of
                   Just x:_  -> Just x
                   Nothing:_ -> error "found fetch with no id"
                   _         -> Nothing
 
+giveFetchesIds :: (Applicative m, MonadGenId m) => Expression -> m Expression
+giveFetchesIds = cata $ \case
+  VarF (Sf sf Nothing) | sf == fetchName -> Var . Sf sf . Just <$> generateId
+  other -> embed <$> sequenceA other
 
-fetchName, accumName, zipName, unzipName :: QualifiedBinding
+fetchName, accumName, zipName, unzipName, mkTreeName, unTreeName :: QualifiedBinding
 
 fetchName = "yauhau/fetch"
 accumName = "yauhau/accum"
 zipName =  "yauhau/zip"
 unzipName = "yauhau/unzip"
+mkTreeName = "yauhau/mkTree"
+unTreeName = "yauhau/unTree"
 
-fetchSF, zipSF, unzipSF, smapSF :: Expression
+fetchSF, zipSF, unzipSF, smapSF, mkTreeSF, unTreeSF, mkTupSf, idSf :: Expression
 fetchSF = Var $ Sf fetchName Nothing
 zipSF = Var $ Sf zipName Nothing
 unzipSF = Var $ Sf unzipName Nothing
 smapSF = Var $ Sf Refs.smap Nothing
-
-
-mkTupSf, idSf :: Expression
-mkTupSf = Var (Sf mkTupRef Nothing)
-idSf = Var (Sf Refs.id Nothing)
+mkTreeSF = Var $ Sf mkTreeName Nothing
+unTreeSF = Var $ Sf unTreeName Nothing
+mkTupSf = Var $ Sf mkTupRef Nothing
+idSf = Var $ Sf Refs.id Nothing
 
 
 equals :: Eq a => a -> Predicate a
@@ -231,10 +238,12 @@ groupFns p'@(Predicate p) = flip runReaderT (id, id, id, HS.empty) . go
 
     decomp = runWriterT . para go0
       where
-        go0 (ApplyF (_, fn) (Var val, _)) = do
-          case val of
-            Local b -> tell [b]
-            _       -> pure ()
+        go0 (ApplyF (_, fn) (val, _)) = do
+          -- HINT: We can use this simple dependency calculation here *only* because we use an SSA form!
+          -- otherwise we would have to consider scope and redefinition as well
+          -- namely if a lambda in `val` defines a binding that is also defined at some later point we
+          -- get false dependencies even though this is technically possible because of local scope
+          tell [ v | Var (Local v) <- universe val]
           fn
         go0 (VarF (Sf sf sfid)) = pure (sf, sfid)
         go0 e = throwErrorS $ "Expected apply or var, got " <> showS (embed $ fmap fst e)

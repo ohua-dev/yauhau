@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-10.4
+resolver: lts-9.21
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -39,7 +39,11 @@ packages:
 - '.'
 - location:
     git: https://github.com/ohua-dev/ohua-core
-    commit: 482dda3a3a4a3b92d6102bba0bbcae058f6db5a2
+    commit: 0eb94a3a03bbe94cd909a345be8b93cdec8b0e14
+  extra-dep: true
+- location:
+    git: git@bitbucket.org:nrink/statefulness
+    commit: 204ef30b86dcbb71fc6327ad53825435186745a0
   extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

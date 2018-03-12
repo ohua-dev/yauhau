@@ -28,6 +28,12 @@ default-extensions:
 - DeriveTraversable
 - DeriveGeneric
 - PatternSynonyms
+dependencies:
+- vector
+- free
+- hashable
+- ohua-core
+- containers
 library:
   source-dirs: src
   exposed-modules:
@@ -39,14 +45,11 @@ library:
   - microlens
   - microlens-mtl
   - containers
-  - unordered-containers
-  - hashable
   - recursion-schemes
-  - ohua-core
   - comonad
   - uniplate
-  - free
   - contravariant
+  - unordered-containers
 executables:
   yauhau-transform-exe:
     main: Main.hs
@@ -58,6 +61,26 @@ executables:
     dependencies:
     - base
     - yauhau-transform
+  yauhau-blog-example:
+    main: blog.hs
+    source-dirs: examples
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - base
+      - hspec
+      - statefulness
+      - time
+      - yauhau-transform
+      - microlens
+      - data-default-class
+      - mtl
+      - text
+      - blaze-html
+      - boxes
+      - graphviz
 tests:
   yauhau-transform-test:
     main: Spec.hs
@@ -70,25 +93,5 @@ tests:
     - base
     - hspec
     - fgl
-    - ohua-core
-    - containers
     - yauhau-transform
-  yauhau-blog-example:
-    main: blog.hs
-    source-dirs: examples
-    ghc-options:
-      - -threaded
-      - -rtsopts
-      - -with-rtsopts=-N
-    dependencies:
-      - base
-      - ohua-core
-      - hspec
-      - containers
-      - statefulness
-      - time
-      - hashable
-      - yauhau-transform
-      - microlens
-      - data-default-class
-      - mtl
+
