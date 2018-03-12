@@ -1,19 +1,10 @@
-(ns blog
-  (:require [ohua.lang :refer [ohua-require defalgo]]
-            [yauhau.core :refer [yauhau]])
-  (:import yauhau.IDataSource))
+(ns blog)
 
-(ohua-require [yauhau.functions :refer :all])
 
-(def datasource (reify IDataSource
-                  (getIdentifier [this] :default)
-                  (fetch [this reqs] "")
-                  (store [this reqs] (throw (new Exception "store is not implemented")))))
-
-(defalgo get-post-ids [] (fetch (request :ids datasource)))
-(defalgo get-post-info [id] (fetch (request [:info id] datasource)))
-(defalgo get-post-content [id] (fetch (request [:content id] datasource)))
-(defalgo get-post-views [id] (fetch (request [:views id] datasource)))
+(defalgo get-post-ids [] (fetch [:posts]))
+(defalgo get-post-info [id] (fetch [:info id]))
+(defalgo get-post-content [id] (fetch [:content id]))
+(defalgo get-post-views [id] (fetch [:views id]))
 
 (defn render-page [_ _]
   :html)
@@ -44,12 +35,11 @@
         topiccounts (frequencies (map post-topic posts))]
     (render-topics topiccounts)))
 
-(def five (Integer. (int 5)))
 
 (defalgo popular-posts []
   (let [pids (get-post-ids)
         views (smap get-post-views pids)
-        ordered (take five (map first (sort-by (flip (comparing second)) (map vector pids views))))
+        ordered (take 5 (map first (sort-by (flip (comparing second)) (map vector pids views))))
         content (smap get-post-details ordered)]
     (render-post-list content)))
 
@@ -60,7 +50,7 @@
 
 (defalgo main-pane []
   (let [posts (get-all-posts-info)
-        ordered (take five (sort-by (comparing post-date)) posts)
+        ordered (take 5 (sort-by (comparing post-date)) posts)
         content (smap (compose get-post-content post-id) ordered)]
     (render-posts (zip ordered content))))
 
@@ -70,4 +60,3 @@
 (defalgo blog []
   (render-page (left-pane) (main-pane)))
 
-(println (yauhau (blog)))
