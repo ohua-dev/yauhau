@@ -12,4 +12,4 @@ library
                , ohua-jvm-integration
                , data-default-class
                , ohua-core
-                
+  maven-repos: file:/Users/justusadam/.m2/repository
