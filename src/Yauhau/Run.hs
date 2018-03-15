@@ -1,32 +1,36 @@
-module Yauhau.Run where
+module Yauhau.Run
+  ( DataSource(answer), WaitingRequest(..), WReq(..),RequestTree, ResponseTree
+  , ResultVar, putResultVar
+  , dataFetch
+  , createAlgo
+  , simpleLift, simpleLift2
+  ) where
 
-import Monad.StreamsBasedFreeMonad
-import Control.Monad.Free
-import Data.Hashable
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Vector as V
-import Data.Typeable
-import Control.Concurrent.MVar
-import qualified Ohua.DFGraph as G
-import qualified Ohua.Util.Str as Str
-import qualified Text.PrettyPrint.Boxes as Box
-import Data.Dynamic2
-import Ohua.ALang.Lang (Expression)
-import Ohua.Compile (passAfterDFLowering, passAfterNormalize, compile)
-import Ohua.Transform.Yauhau
-import Control.Monad.IO.Class
-import Control.Monad.Except
-import Ohua.Monad
-import Data.Default.Class
-import Ohua.Unit
-import Ohua.ALang.Show
-import Control.Concurrent.Async
-import Lens.Micro.Platform
-import Data.Maybe
-import Data.Vector (Vector)
-import Type.Magic
-import Data.List (transpose)
+import           Control.Concurrent.Async
+import           Control.Concurrent.MVar
+import           Control.Monad.Except
+import           Control.Monad.Free
+import           Data.Default.Class
+import           Data.Dynamic2
+import           Data.Hashable
+import qualified Data.HashMap.Strict         as HM
+import           Data.List                   (transpose)
+import           Data.Maybe
+import           Data.Vector                 (Vector)
+import qualified Data.Vector                 as V
+import           Lens.Micro.Platform
+import           Monad.StreamsBasedFreeMonad hiding (runCompiler, createAlgo)
+import           Ohua.ALang.Lang             (Expression)
+import           Ohua.ALang.Show
+import           Ohua.Compile                (compile, passAfterDFLowering,
+                                              passAfterNormalize)
+import qualified Ohua.DFGraph                as G
+import           Ohua.Monad
+import           Ohua.Transform.Yauhau
+import           Ohua.Unit
+import qualified Ohua.Util.Str               as Str
+import qualified Text.PrettyPrint.Boxes      as Box
+import           Type.Magic
 
 type Tree a = Free [] a
 
@@ -66,7 +70,12 @@ fetchSf = Sf f (Just fetchName)
       pure $ Pure $ toDyn resVar
     f _ = error "Invariant broken, got Free, expected Pure"
 
+simpleLift :: (Typeable ret, Typeable a)
+           => (a -> ret) -> Var a -> ASTM globalState (Var ret)
 simpleLift f = call (liftSf $ sfm . pure . f) united
+
+simpleLift2 :: (Typeable ret, Typeable t, Typeable t1)
+            => (t1 -> t -> ret) -> Var t1 -> Var t -> ASTM globalState (Var ret)
 simpleLift2 f = call (liftSf $ \a b -> sfm $ pure $ f a b) united
 
 
@@ -84,10 +93,10 @@ dataFetch req = do
   call (liftSf $ sfm . liftIO . readMVar . forceDynamic . unpure) united answered
   where
     unpure (Pure v) = v
-    unpure _        = error "Invariant broken, got Free, expected Pure"
+    unpure _        = error "Invariant broken, got Free, expected Pure in dataFetch"
 
-runCompilerY :: Expression -> IO G.OutGraph
-runCompilerY
+runCompiler :: Expression -> IO G.OutGraph
+runCompiler
   = fmap (either (error . Str.toString) makeDestructuringExplicit)
   . runExceptT
   . runStderrLoggingT
@@ -121,16 +130,6 @@ runCompilerY
                         pure combined
                     }
 
-answerRequests :: (Eq request, Hashable request)
-               => ([request] -> IO [response])
-               -> [Tree request] -> IO [Tree response]
-answerRequests answer trees = do
-  responses <- answer reqList
-  let responseMap = HM.fromList (zip reqList responses)
-  pure $ map (fmap (responseMap HM.!)) trees
-  where
-    reqList = HS.toList $ HS.fromList $ trees >>= foldFree id
-
 
 data DSScopedMap
   = forall req
@@ -144,10 +143,10 @@ data ReqScopedMap req
   => ReqScopedMap (HM.HashMap (req a) (MVar a))
 
 
-accumHandle :: Vector (Tree WReq) -> IO (Vector (Tree Dynamic))
+accumHandle :: Vector RequestTree -> IO (Vector ResponseTree)
 accumHandle reqs = do
   allReqs <- foldM createAndInsert HM.empty reqList
-  mapM_ (\(DSScopedMap reqs) -> async $ answer $ flattenDsScopedMap reqs) (HM.elems allReqs)
+  mapM_ (\(DSScopedMap reqMap) -> async $ answer $ flattenDsScopedMap reqMap) (HM.elems allReqs)
   pure $ fmap (fmap $ lookupResVar allReqs) reqs
   where
     reqList = V.toList reqs >>= foldFree id
@@ -173,7 +172,7 @@ accumHandle reqs = do
       [ wr
       | x <- HM.elems m
       , wr <- case x of
-                ReqScopedMap m -> map (uncurry WaitingRequest) $ HM.toList m
+                ReqScopedMap rsm -> map (uncurry WaitingRequest) $ HM.toList rsm
       ]
 
     createAndInsert :: HM.HashMap TypeRep DSScopedMap -> WReq -> IO (HM.HashMap TypeRep DSScopedMap)
@@ -196,11 +195,11 @@ accumHandle reqs = do
                       Nothing -> do
                         resVar <- newResultVar
                         pure $ insertDsScopedMap (ReqScopedMap $ reqScopedMap & at r .~ Just resVar)
-                      Just var -> pure reqMap
+                      Just _ -> pure reqMap
                   | otherwise -> error "Cast failed"
           | otherwise -> error "Cast failed"
           where
-            
+
       where
         rty = getRTy r
         raTy = getRaTy r
@@ -209,12 +208,12 @@ accumHandle reqs = do
 
         newDSScopedMap = DSScopedMap . HM.singleton raTy . newReqScopedMap
         newReqScopedMap = ReqScopedMap . HM.singleton r
-      
 
 
-createAlgoY :: ASTM s (Var a) -> IO (Algorithm s a)
-createAlgoY astm = do
-  gr <- runCompilerY expr
+
+createAlgo :: ASTM s (Var a) -> IO (Algorithm s a)
+createAlgo astm = do
+  gr <- runCompiler expr
   -- let simpleStrLabel = pure . toLabel
   --     dotParams = nonClusteredParams
   --       { fmtNode = \(id, label) -> simpleStrLabel $ show label ++ "(" ++ show id ++ ")"
@@ -228,9 +227,9 @@ createAlgoY astm = do
     (dict, expr) = evaluateAST astm
     dict' = dict
             & at accumName .~ Just (StreamProcessor $ pure $ do
-                                       vals <- fmap forceDynamic <$> recieveAll
+                                       vals <- recieveAll
                                        withIsAllowed $
-                                         send =<< liftIO (accumHandle vals)
+                                         send . fmap toDyn =<< liftIO (accumHandle vals)
                                        )
             & at mkTupRef .~ Just (StreamProcessor $ pure $ withIsAllowed . send =<< recieveAllUntyped)
             & at unzipName .~ Just (StreamProcessor $ pure $ do

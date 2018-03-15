@@ -20,6 +20,7 @@ import           Ohua.ALang.Passes                 (normalize)
 import qualified Ohua.ALang.Refs                   as Refs
 import           Ohua.Monad
 import           Ohua.Types
+import           Ohua.Unit
 import           Ohua.Util
 import           Ohua.Util.Str                     (showS)
 import           Prelude                           hiding (id, (.))
@@ -76,7 +77,9 @@ splitExp fnId predefinedBnds expr = do
           resultBnd <- generateBinding
           defined <- ask
           let carryoverFreeVars = HS.toList $ HS.intersection defined usedBindings
-          tellMut $ Let (Direct combFreeBnd) $ foldl' Apply mkTupSf (map (Var . Local) carryoverFreeVars)
+          tellMut $ Let (Direct combFreeBnd) $ if null carryoverFreeVars
+            then mkTupSf `Apply` unitExpr
+            else foldl' Apply mkTupSf (map (Var . Local) carryoverFreeVars)
 
           newCarryoverFreeVars <- traverse generateBindingWith carryoverFreeVars
 
@@ -271,13 +274,11 @@ combineTo p'@(Predicate p) f = histo go
 
     go (LetF assign1
          (_ :< ApplyF (_ :< VarF (Sf f0 sfid)) arg1)
-         (_ :< LetF assign2
-                    (_ :< ApplyF (_ :< VarF (Sf f1 _)) arg2)
-                    rest))
-      | p f0 && p f1 =
-          case (assign1, assign2) of
-            (Direct bnd0, Direct b) ->
-              recurse $ Let (Destructure [bnd0, b]) (Var (Sf f sfid) `Apply` rebuild arg1 `Apply` rebuild arg2) $ rebuild rest
+         rest)
+      | p f0 =
+          case assign1 of
+            Direct bnd0 ->
+              recurse $ Let (Destructure [bnd0]) (Var (Sf f sfid) `Apply` rebuild arg1) $ rebuild rest
             _ -> throwErrorS "Invariant broken. Assigns for combine 2nd case."
 
     go (LetF assign val body) = Let assign (rebuild val) <$> extract body

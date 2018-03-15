@@ -43,7 +43,7 @@ packages:
   extra-dep: true
 - location:
     git: git@bitbucket.org:nrink/statefulness
-    commit: c8837b45cf43fc28f56d20c28f0e4844c7c3684f
+    commit: b87aaf0a3fdad76eb706bfde7bc88613986dedd1
     #../statefulness
   extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver

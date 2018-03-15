@@ -5,41 +5,18 @@
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.Except
-import           Control.Monad.Free
-import           Data.Default.Class
-import           Data.Dynamic2
 import           Data.Function
-import           Data.GraphViz
 import           Data.List
 import           Data.Map                        (Map)
 import qualified Data.Map                        as Map
 import           Data.Ord
-import qualified Data.Text.IO                    as T
 import           Data.Time
-import           Data.Typeable
-import qualified Data.Vector                     as V
-import           GHC.Exts                        (Any)
-import           Lens.Micro
-import           Monad.StreamsBasedFreeMonad
-import           Ohua.ALang.Lang                 hiding (Sf)
-import           Ohua.ALang.Show                 (renderExpr)
-import           Ohua.Compile
-import qualified Ohua.DFGraph                    as G
-import           Ohua.DFGraph.Show
-import           Ohua.Monad
-import           Ohua.Test.DFGraph
-import           Ohua.Transform.Yauhau
-import           Ohua.Unit
-import qualified Ohua.Util.Str                   as Str
+import           Monad.StreamsBasedFreeMonad hiding (createAlgo)
 import           Prelude                         hiding (sequence)
 import qualified Text.Blaze.Html                 as B
 import qualified Text.Blaze.Html.Renderer.Pretty as B
 import qualified Text.Blaze.Html5                as B
-import qualified Text.PrettyPrint.Boxes          as Box
-import           Type.Magic
 import           Types
-import           Unsafe.Coerce
 import           Yauhau.Run
 
 -- -----------------------------------------------------------------------------
@@ -175,4 +152,4 @@ renderTopics m = do
       B.td (B.toHtml name)
       B.td (B.toHtml views)
 
-main = putStrLn . B.renderHtml =<< flip runAlgo () =<< createAlgoY blog
+main = putStrLn . B.renderHtml =<< flip runAlgo () =<< createAlgo blog
