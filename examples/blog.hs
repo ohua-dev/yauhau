@@ -40,6 +40,7 @@ import qualified Text.PrettyPrint.Boxes          as Box
 import           Type.Magic
 import           Types
 import           Unsafe.Coerce
+import           Yauhau.Run
 
 -- -----------------------------------------------------------------------------
 -- IO
@@ -56,70 +57,16 @@ getPostContent = dataFetch <=< simpleLift FetchPostContent
 getPostViews   = dataFetch <=< simpleLift FetchPostViews
 -- >>
 
-dataFetch :: Typeable a => Var (Request a) -> Fetch a
-dataFetch req = do
-  packaged <- simpleLift (Pure . packageRequest) req
-  answered <- call fetchSf united packaged
-  unpackage <- simpleLift selectUnpackager req
-  simpleLift2 ($) unpackage =<< simpleLift unpure answered
-  where
-    unpure (Pure v) = v
-    unpure _        = error "Invariant broken, got Free, expected Pure"
+instance DataSource Request where
+  answer reqs = forM_ reqs $ \(WaitingRequest r var) ->
+    putResultVar var $ fetchFunc r
 
-fetchSf :: Sf (RequestTree -> SfMonad state ResponseTree)
-fetchSf = Sf (sfm . pure . fmap fetchFunc) (Just fetchName)
-
-fetchFunc :: Request__ -> Response__
-fetchFunc = \case
-  ReqPosts__ -> RespPosts__ $ map PostId [0..10]
-  ReqContent__ (PostId i) -> RespContent__ $ "[content " ++ show i ++ "]"
-  ReqInfo__ i -> RespInfo__ $ PostInfo i (UTCTime (toEnum 0) (toEnum 0)) ""
-  ReqViews__ (PostId i) -> RespViews__ 0
-
-data Request__
-  = ReqPosts__
-  | ReqInfo__ PostId
-  | ReqContent__ PostId
-  | ReqViews__ PostId
-  deriving Typeable
-
-data Response__
-  = RespPosts__ [PostId]
-  | RespInfo__ PostInfo
-  | RespContent__ PostContent
-  | RespViews__ Int
-  deriving Typeable
-
-selectUnpackager :: Request a -> Response__ -> a
-selectUnpackager FetchPosts           = selectPostsResp
-selectUnpackager (FetchPostContent _) = selectContentResponse
-selectUnpackager (FetchPostInfo _)    = selectInfoResponse
-selectUnpackager (FetchPostViews _)   = selectViewsResponse
-
-selectPostsResp :: Response__ -> [PostId]
-selectPostsResp (RespPosts__ p) = p
-selectPostsResp _               = error "Expected posts response"
-
-selectInfoResponse :: Response__ -> PostInfo
-selectInfoResponse (RespInfo__ i) = i
-selectInfoResponse _              = error "Expected info response"
-
-selectContentResponse :: Response__ -> PostContent
-selectContentResponse (RespContent__ c) = c
-selectContentResponse _                 = error "Expected content response"
-
-selectViewsResponse :: Response__ -> Int
-selectViewsResponse (RespViews__ v) = v
-selectViewsResponse _               = error "Expected views response"
-
-packageRequest :: Request a -> Request__
-packageRequest FetchPosts           = ReqPosts__
-packageRequest (FetchPostInfo i)    = ReqInfo__ i
-packageRequest (FetchPostContent c) = ReqContent__ c
-packageRequest (FetchPostViews v)   = ReqViews__ v
-
-simpleLift f = call (liftSf $ sfm . pure . f) united
-simpleLift2 f = call (liftSf $ \a b -> sfm $ pure $ f a b) united
+    where
+      fetchFunc :: Request a -> a
+      fetchFunc FetchPosts = map PostId [0..10]
+      fetchFunc (FetchPostInfo i) = PostInfo i (UTCTime (toEnum 0) (toEnum 0)) "t"
+      fetchFunc (FetchPostContent i) = "[content " ++ show i ++ "]"
+      fetchFunc (FetchPostViews (PostId i)) = (i `mod` 3) * 3
 
 -- -----------------------------------------------------------------------------
 -- Blog code
@@ -127,9 +74,6 @@ simpleLift2 f = call (liftSf $ \a b -> sfm $ pure $ f a b) united
 type Html = B.Html
 
 type Fetch a = ASTM () (Var a)
-
-type RequestTree = Free [] Request__
-type ResponseTree = Free [] Response__
 
 -- <<blog
 blog :: Fetch Html
@@ -230,73 +174,5 @@ renderTopics m = do
     forM_ (Map.toList m) $ \(name, views) -> B.tr $ do
       B.td (B.toHtml name)
       B.td (B.toHtml views)
-
-runCompilerY :: Expression -> IO G.OutGraph
-runCompilerY
-  = fmap (either (error . Str.toString) makeDestructuringExplicit)
-  . runExceptT
-  . runStderrLoggingT
-  . filterLogger (const $ (>= LevelError))
-  . compile def def { passAfterDFLowering = cleanUnits
-                    , passAfterNormalize = \alang' -> do
-                        alang <- giveFetchesIds alang'
-                        liftIO $ putStrLn $ unlines
-                          [ ""
-                          , "Before transform:"
-                          , ""
-                          , Box.render (renderExpr alang)
-                          , ""
-                          ]
-                        lifted <- liftSmap alang
-                        liftIO $ putStrLn $ unlines
-                          [ ""
-                          , "After Lift:"
-                          , ""
-                          , Box.render (renderExpr lifted)
-                          , ""
-                          ]
-                        combined <- combineIO lifted
-                        liftIO $ putStrLn $ unlines
-                          [ ""
-                          , "After combine:"
-                          , ""
-                          , Box.render (renderExpr combined)
-                          , ""
-                          ]
-                        pure combined
-                    }
-
-createAlgoY :: ASTM s (Var a) -> IO (Algorithm s a)
-createAlgoY astm = do
-  gr <- runCompilerY expr
-  let simpleStrLabel = pure . toLabel
-      dotParams = nonClusteredParams
-        { fmtNode = \(id, label) -> simpleStrLabel $ show label ++ "(" ++ show id ++ ")"
-        , fmtEdge = \(_, _, OhuaGrEdgeLabel source target) -> simpleStrLabel $ show source ++ " -> " ++ show target
-        }
-      dotGr = graphToDot dotParams (unGr $ toFGLGraph gr)
-  fp <- runGraphviz dotGr Jpeg "testgr.jpeg"
-  putStrLn $ "Graphviz return was " ++ fp
-  pure $ graphToAlgo dict' gr
-  where
-    (dict, expr) = evaluateAST astm
-    dict' = dict
-            & at accumName .~ Just (StreamProcessor $ pure $ do
-                                       vals <- recieveAllUntyped
-                                       let processed = map (toDyn . (fmap fetchFunc :: RequestTree -> ResponseTree) . forceDynamic) vals
-                                       send $ V.fromList $ processed
-                                       )
-            & at mkTupRef .~ Just (StreamProcessor $ pure $ send . V.fromList =<< recieveAllUntyped)
-            & at unzipName .~ Just (StreamProcessor $ pure $ do
-                                       ls <- recieve 0 :: StreamM [V.Vector Dynamic]
-                                       send $ V.fromList $ map injectList $ transpose $ map V.toList ls
-                                   )
-            & at zipName .~ Just (StreamProcessor $ pure $ do
-                                     ls <- map extractList <$> recieveAllUntyped
-                                     send $ map V.fromList $ transpose ls
-                                 )
-            & at mkTreeName .~ Just (pureSF $ (Free :: [RequestTree] -> RequestTree))
-            & at unTreeName .~ Just (pureSF $ (\case Free l -> l :: [ResponseTree]; _ -> error "Invariant broken, expected Free, got pure"))
-    pureSF f = CallSf $ SfRef (liftSf (sfm . pure . f)) united
 
 main = putStrLn . B.renderHtml =<< flip runAlgo () =<< createAlgoY blog

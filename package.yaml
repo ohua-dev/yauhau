@@ -34,10 +34,15 @@ dependencies:
 - hashable
 - ohua-core
 - containers
+- unordered-containers
+- data-default-class
+- async
+- microlens-platform
 library:
   source-dirs: src
   exposed-modules:
   - Ohua.Transform.Yauhau
+  - Yauhau.Run
   other-modules: []
   dependencies:
   - base >=4.7 && <5
@@ -49,7 +54,8 @@ library:
   - comonad
   - uniplate
   - contravariant
-  - unordered-containers
+  - statefulness
+  - boxes
 executables:
   yauhau-transform-exe:
     main: Main.hs

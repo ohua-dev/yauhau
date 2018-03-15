@@ -43,7 +43,8 @@ packages:
   extra-dep: true
 - location:
     git: git@bitbucket.org:nrink/statefulness
-    commit: 204ef30b86dcbb71fc6327ad53825435186745a0
+    commit: c8837b45cf43fc28f56d20c28f0e4844c7c3684f
+    #../statefulness
   extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
