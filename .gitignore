@@ -22,3 +22,7 @@ pom.xml.asc
 /.stack-work/
 dist/
 .cabal-sandbox/
+
+yauhau-transform.cabal
+/jvm/project.clj
+/jvm/target/
